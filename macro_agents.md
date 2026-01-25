@@ -5,6 +5,7 @@ This file provides practical guidance for AI agents (and users) when using `hetm
 ### Core Principles
 
 - Use `grids.py` to construct state grids before anything else.
+- Use `quadrature.py` to compute expectations over continuous distributions.
 - Use `markov.py` to discretize income or productivity processes.
 - Use `backward.py` for policy iteration (EGM or VFI).
 - Use `forward.py` or `distributions.py` to obtain stationary distributions.
@@ -84,11 +85,60 @@ Va, a_pol, c_pol = policy_iteration(Pi, a_grid, y, r, beta, eis, method="egm")
 Va, a_pol, c_pol = policy_iteration(Pi, a_grid, y, r, beta, eis, method="vfi")
 ```
 
+### Computing expectations with quadrature
+
+Use `quadrature.py` to approximate integrals/expectations over continuous distributions. Each function returns `(nodes, weights)` where `E[f(X)] ≈ sum(weights * f(nodes))`.
+
+**Choosing the right rule:**
+
+| Distribution | Function | Notes |
+|--------------|----------|-------|
+| Normal | `qnwnorm(n, mu, sigma)` | Gauss-Hermite; best for income shocks |
+| Lognormal | `qnwlogn(n, mu, sigma)` | Exponentiated Hermite nodes |
+| Uniform | `qnwunif(n, a, b)` | Normalized Legendre weights |
+| Bounded interval | `qnwlege(n, a, b)` | Gauss-Legendre; general smooth functions |
+| Beta | `qnwbeta(n, a, b)` | Gauss-Jacobi; bounded [0,1] |
+| Gamma | `qnwgamma(n, a, b)` | Gauss-Laguerre; positive support |
+| Multivariate normal | `qnwnorm_mv(n, mu, Sigma)` | Tensor product of Hermite |
+| Pre-specified grid | `qnwsimp`, `qnwtrap` | Newton-Cotes; equally-spaced nodes |
+
+**Example: E[exp(X)] where X ~ N(0, 0.1²)**
+```python
+from hetmacro.quadrature import qnwnorm
+import numpy as np
+
+nodes, weights = qnwnorm(n=5, mu=0.0, sigma=0.1)
+approx = np.dot(weights, np.exp(nodes))
+# True answer: exp(0.5 * 0.1^2) ≈ 1.00501
+```
+
+**Example: Multivariate expectation E[exp(x - 2y)]**
+```python
+from hetmacro.quadrature import qnwnorm_mv
+import numpy as np
+
+n = np.array([5, 5])
+mu = np.array([0.0, 0.0])
+Sigma = np.array([[1.0, 0.5], [0.5, 1.0]])
+nodes, weights = qnwnorm_mv(n, mu, Sigma)
+
+def f(X):
+    return np.exp(X[:, 0] - 2 * X[:, 1])
+
+approx = np.dot(weights, f(nodes))
+```
+
+**When to use which:**
+- **Gauss rules** (Hermite, Legendre, etc.): Smooth functions; optimal accuracy with few nodes.
+- **Newton-Cotes** (Simpson, Trapezoid): When function values are only available on a fixed grid.
+
 ---
 
 ## Notes for Agents
 
 - If the model has multiple state variables, construct separate grids with `GridSpec` and assemble them with `make_grid_nd`.
 - If accuracy is poor near kinks, increase grid density locally via `concentration_points`.
+- For computing expectations over continuous shocks, use `quadrature.py`. Match the quadrature rule to the distribution: `qnwnorm` for normal, `qnwlege` for bounded intervals, etc.
+- Beware the **curse of dimensionality**: tensor-product quadrature grows as n^d. For high dimensions, consider sparse grids or Monte Carlo.
 - When adding new models, place them under `hetmacro/models/` and reuse tools rather than re-implementing.
 
