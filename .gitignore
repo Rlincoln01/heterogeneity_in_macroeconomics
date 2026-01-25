@@ -6,3 +6,5 @@ Material/
 *.toc
 *.fls
 *.fdb_latexmk
+__pycache__/
+*.pyc

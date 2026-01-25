@@ -22,6 +22,7 @@
 \usepackage{setspace}
 \usepackage{csquotes}
 \usepackage{enumitem}
+\usepackage{xstring}
 \usepackage{longtable}
 
 % Mathematics
@@ -71,8 +72,27 @@
 }
 
 \newcommand{\argument}[3]{\texttt{#1} (\textit{#2}): #3}
-\newcommand{\returns}[1]{\textbf{Returns:} #1}
-\newcommand{\connection}[1]{\textbf{Connections:} #1}
+\newcommand{\returns}[1]{\paragraph{Returns.} #1}
+\newcommand{\connection}[1]{\paragraph{Connections.} #1}
+
+% Argument list formatting (labels on their own line)
+\newlist{arglist}{description}{1}
+\setlist[arglist]{style=nextline,leftmargin=0pt,labelwidth=0pt,align=left,itemsep=0.2em}
+
+% Replace bold labels with paragraph headings for consistent indentation
+\let\oldtextbf\textbf
+\newcommand{\labelpara}[1]{\paragraph{#1}\mbox{}\par\noindent\ignorespaces}
+\newcommand{\formatlabel}[1]{%
+    \IfStrEq{#1}{Purpose:}{\labelpara{Purpose.}}{%
+    \IfStrEq{#1}{Arguments:}{\labelpara{Arguments.}}{%
+    \IfStrEq{#1}{Example:}{\labelpara{Example.}}{%
+    \IfStrEq{#1}{Workflow:}{\labelpara{Workflow.}}{%
+    \IfStrEq{#1}{Algorithm:}{\labelpara{Algorithm.}}{%
+    \IfStrEq{#1}{Note:}{\labelpara{Note.}}{%
+    \IfStrEq{#1}{When to use:}{\labelpara{When to use.}}{%
+    \oldtextbf{#1}}}}}}}}%
+}
+\renewcommand{\textbf}[1]{\formatlabel{#1}}
 
 % Document metadata
 \title{\vspace{-1cm}\textbf{hetmacro Codebook}\\[0.5em]\large A Comprehensive Guide to Numerical Tools\\for Heterogeneous Agent Macroeconomics}
@@ -171,7 +191,7 @@ class GridSpec:
 \textbf{Purpose:} A specification object for one dimension of a grid. Use \texttt{GridSpec} when constructing multi-dimensional grids via \texttt{make\_grid\_nd}.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{lower}] Lower bound of the state variable (e.g., borrowing limit $\underline{a}$).
     \item[\texttt{upper}] Upper bound (e.g., maximum asset level $\bar{a}$).
     \item[\texttt{n\_points}] Number of grid points. More points $\Rightarrow$ higher accuracy but slower computation.
@@ -181,7 +201,7 @@ class GridSpec:
     \item[\texttt{concentration\_weight}] Strength $\in [0,1]$ of concentration effect.
     \item[\texttt{concentration\_radius}] Scale parameter for concentration kernel. Defaults to 10\% of range.
     \item[\texttt{custom\_func}] For \texttt{spacing="custom"}: a function mapping $[0,1] \to [\text{lower}, \text{upper}]$.
-\end{itemize}
+\end{arglist}
 
 \subsection{Function: \texttt{make\_grid\_1d}}
 
@@ -202,7 +222,7 @@ def make_grid_1d(
 \textbf{Purpose:} Create a one-dimensional grid with flexible spacing. This is the workhorse function for discretizing a single state variable.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{lower, upper}] Bounds of the grid (inclusive). For assets, typically \texttt{lower=0} (or natural borrowing limit) and \texttt{upper} large enough to be non-binding.
     \item[\texttt{n}] Number of grid points (must be $\geq 2$).
     \item[\texttt{spacing}] Grid spacing method:
@@ -217,7 +237,7 @@ def make_grid_1d(
     \item[\texttt{power}] Exponent for power spacing (default 1.0 = linear).
     \item[\texttt{concentration\_*}] Optional point concentration (see \texttt{GridSpec}).
     \item[\texttt{custom\_func}] Required if \texttt{spacing="custom"}.
-\end{itemize}
+\end{arglist}
 
 \returns{1D NumPy array of grid points, sorted and with exact endpoints.}
 
@@ -257,6 +277,7 @@ a_grid_kink = make_grid_1d(
 def make_grid_nd(
     specs: Sequence[GridSpec],
     cartesian: bool = False,
+    tensor: bool = False,
     order: str = "C",
 ) -> Tuple[List[np.ndarray], Optional[np.ndarray]]
 \end{lstlisting}
@@ -264,15 +285,16 @@ def make_grid_nd(
 \textbf{Purpose:} Construct multi-dimensional grids from a list of \texttt{GridSpec} objects. Essential for models with multiple state variables (e.g., assets and human capital, or assets and housing).
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{specs}] Sequence of \texttt{GridSpec} objects, one per dimension.
     \item[\texttt{cartesian}] If \texttt{True}, also return the Cartesian product of all grids as a 2D array where each row is a state combination.
+    \item[\texttt{tensor}] If \texttt{True}, return a tensor grid of shape $(n_1, n_2, \ldots, n_d, d)$.
     \item[\texttt{order}] Memory layout: \texttt{"C"} (row-major) or \texttt{"F"} (column-major, Fortran-style).
-\end{itemize}
+\end{arglist}
 
-\returns{Tuple of (list of 1D grids, optional Cartesian product array).}
+\returns{Tuple of (list of 1D grids, optional Cartesian/tensor grid).}
 
-\connection{The 1D grids are used independently in \texttt{interpolation.py}; the Cartesian product is useful for computing expectations over joint distributions.}
+\connection{The 1D grids are used independently in \texttt{interpolation.py}; the Cartesian product is useful for computing expectations over joint distributions; the tensor grid is useful for reshaping policies over full state tensors.}
 
 \textbf{Example:}
 \begin{lstlisting}
@@ -288,6 +310,10 @@ a_grid, h_grid = grids
 print(f"Asset grid: {len(a_grid)} points")
 print(f"Human capital grid: {len(h_grid)} points")
 print(f"State space: {product.shape[0]} total states")
+
+# Tensor grid with shape (n_a, n_h, 2)
+grids, tensor = make_grid_nd(specs, tensor=True)
+print(tensor.shape)
 \end{lstlisting}
 
 \subsection{Function: \texttt{make\_asset\_grid}}
@@ -304,12 +330,12 @@ def make_asset_grid(
 \textbf{Purpose:} Convenience function for the common case of an asset grid with power spacing. This is a thin wrapper around \texttt{make\_grid\_1d} with sensible defaults for incomplete markets models.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{amin}] Borrowing limit (often 0 or natural borrowing limit).
     \item[\texttt{amax}] Upper bound on assets.
     \item[\texttt{n}] Number of grid points.
     \item[\texttt{curvature}] Power exponent (default 2.0 works well in practice).
-\end{itemize}
+\end{arglist}
 
 \returns{1D array of asset grid points.}
 
@@ -344,10 +370,10 @@ def gridmake(*grids, order: str = "C") -> np.ndarray  # alias
 \textbf{Purpose:} Compute the Cartesian product of multiple 1D grids. Each row of the output represents one combination of state values.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{*grids}] Variable number of 1D arrays.
     \item[\texttt{order}] Memory layout for iteration order.
-\end{itemize}
+\end{arglist}
 
 \returns{2D array of shape $(n_1 \times n_2 \times \cdots, d)$ where $d$ is the number of grids.}
 
@@ -360,6 +386,67 @@ a_grid = np.array([0, 1, 2])
 e_grid = np.array([0.5, 1.0, 1.5])
 states = cartesian_product(a_grid, e_grid)
 # states[0] = [0, 0.5], states[1] = [0, 1.0], etc.
+\end{lstlisting}
+
+\subsection{Function: \texttt{tensor\_product}}
+
+\begin{lstlisting}
+def tensor_product(*grids) -> np.ndarray
+\end{lstlisting}
+
+\textbf{Purpose:} Construct a tensor grid that preserves the full $n_1 \times \cdots \times n_d$ structure, with the last axis storing coordinates.
+
+\textbf{Arguments:}
+\begin{arglist}
+    \item[\texttt{*grids}] Variable number of 1D arrays.
+\end{arglist}
+
+\returns{Array of shape $(n_1, n_2, \ldots, n_d, d)$.}
+
+\textbf{Example:}
+\begin{lstlisting}
+from hetmacro.grids import tensor_product
+import numpy as np
+
+a_grid = np.array([0, 1, 2])
+e_grid = np.array([0.5, 1.0])
+tensor = tensor_product(a_grid, e_grid)
+# tensor.shape == (3, 2, 2)
+\end{lstlisting}
+
+\subsection{Function: \texttt{smolyak\_sparse\_grid}}
+
+\begin{lstlisting}
+def smolyak_sparse_grid(
+    specs: Sequence[GridSpec],
+    level: int,
+    rule: str = "clenshaw_curtis",
+    unique_decimals: int = 14,
+) -> np.ndarray
+\end{lstlisting}
+
+\textbf{Purpose:} Construct a Smolyak sparse grid on a hyper-rectangle using nested Clenshaw--Curtis nodes to reduce the curse of dimensionality.
+
+\textbf{Arguments:}
+\begin{arglist}
+    \item[\texttt{specs}] GridSpec list; uses only \texttt{lower} and \texttt{upper} per dimension.
+    \item[\texttt{level}] Smolyak level ($\geq 1$). Higher levels add more points.
+    \item[\texttt{rule}] 1D nested rule (currently \texttt{"clenshaw\_curtis"}).
+    \item[\texttt{unique\_decimals}] Decimal rounding for deduplication of nested nodes.
+\end{arglist}
+
+\returns{Array of unique sparse-grid points of shape $(n_{\text{points}}, d)$.}
+
+\textbf{Example:}
+\begin{lstlisting}
+from hetmacro.grids import GridSpec, smolyak_sparse_grid
+
+specs = [
+    GridSpec(lower=-1, upper=1, n_points=0),
+    GridSpec(lower=-1, upper=1, n_points=0),
+]
+points = smolyak_sparse_grid(specs, level=3)
+print(points.shape)
 \end{lstlisting}
 
 % ------------------------------------------------------------------
@@ -396,11 +483,11 @@ def qnwnorm(
 \]
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{n}] Number of quadrature nodes. Higher $n$ = more accurate but more expensive. Typically 5-9 is sufficient.
     \item[\texttt{mu}] Mean of the normal distribution.
     \item[\texttt{sigma}] Standard deviation.
-\end{itemize}
+\end{arglist}
 
 \returns{Tuple \texttt{(nodes, weights)} where \texttt{nodes} are evaluation points and \texttt{weights} sum to 1.}
 
@@ -441,10 +528,10 @@ def qnwlege(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]
 \textbf{Purpose:} Gauss-Legendre quadrature for integrals over bounded intervals $[a, b]$. Optimal for smooth functions on compact domains.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{n}] Number of nodes.
     \item[\texttt{a, b}] Integration bounds.
-\end{itemize}
+\end{arglist}
 
 \returns{Tuple \texttt{(nodes, weights)} for approximating $\int_a^b f(x) dx$.}
 
@@ -485,11 +572,11 @@ def qnwnorm_mv(
 \textbf{Purpose:} Multivariate normal quadrature via tensor product. For $X \sim \mathcal{N}(\mu, \Sigma)$, computes nodes and weights for $\mathbb{E}[f(X)]$.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{n}] Array of number of nodes per dimension.
     \item[\texttt{mu}] Mean vector.
     \item[\texttt{Sigma}] Covariance matrix (must be positive definite).
-\end{itemize}
+\end{arglist}
 
 \returns{Tuple \texttt{(nodes, weights)} where \texttt{nodes} has shape $(n_1 \times \cdots \times n_d, d)$.}
 
@@ -543,11 +630,11 @@ def interp_linear(
 \textbf{Purpose:} Vectorized 1D linear interpolation. Given function values $y = f(x_{\text{grid}})$, evaluate at new points $x_{\text{new}}$.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{x\_grid}] 1D array of grid points (must be sorted ascending).
     \item[\texttt{y}] Function values. Shape \texttt{(n,)} for single function or \texttt{(m, n)} for $m$ functions on the same grid.
     \item[\texttt{x\_new}] Points at which to interpolate.
-\end{itemize}
+\end{arglist}
 
 \returns{Interpolated values, same shape as \texttt{x\_new} (or \texttt{(m,) + x\_new.shape} for multiple functions).}
 
@@ -580,11 +667,11 @@ def interp_bilinear(
 \textbf{Purpose:} Bilinear interpolation on a 2D rectilinear grid. For functions of two state variables $f(x, y)$.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{x\_grid, y\_grid}] 1D arrays defining the grid in each dimension.
     \item[\texttt{z}] Function values, shape \texttt{(len(y\_grid), len(x\_grid))}.
     \item[\texttt{x\_new, y\_new}] Points at which to interpolate.
-\end{itemize}
+\end{arglist}
 
 \returns{Interpolated values at \texttt{(x\_new, y\_new)} pairs.}
 
@@ -603,10 +690,10 @@ def get_lottery(
 \]
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{a\_policy}] Policy function values (any shape).
     \item[\texttt{a\_grid}] Asset grid (1D, sorted).
-\end{itemize}
+\end{arglist}
 
 \returns{Tuple \texttt{(a\_i, a\_pi)} where \texttt{a\_i} is the lower grid index and \texttt{a\_pi} is the probability on \texttt{a\_i}.}
 
@@ -839,12 +926,12 @@ def rouwenhorst(
 \textbf{Purpose:} Rouwenhorst discretization of AR(1) process. Preferred method for highly persistent processes ($\rho > 0.9$).
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{n}] Number of states (typically 5-11).
     \item[\texttt{rho}] Persistence parameter of AR(1).
     \item[\texttt{sigma}] Standard deviation of innovation $\varepsilon_t$.
     \item[\texttt{mu}] Unconditional mean (default 0).
-\end{itemize}
+\end{arglist}
 
 \returns{Tuple \texttt{(states, Pi)} where \texttt{states} is 1D array of state values and \texttt{Pi} is $n \times n$ transition matrix.}
 
@@ -879,13 +966,13 @@ def tauchen(
 \textbf{Purpose:} Tauchen method for AR(1) discretization. Uses equally-spaced states covering $\pm n_{\text{std}}$ standard deviations.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{n}] Number of states.
     \item[\texttt{rho}] Persistence.
     \item[\texttt{sigma}] Innovation standard deviation.
     \item[\texttt{mu}] Unconditional mean.
     \item[\texttt{n\_std}] Number of standard deviations to cover (default 3).
-\end{itemize}
+\end{arglist}
 
 \textbf{When to use:} For less persistent processes ($\rho < 0.9$); Rouwenhorst is generally preferred otherwise.
 
@@ -902,11 +989,11 @@ def stationary_distribution(
 \textbf{Purpose:} Compute the stationary distribution $\pi$ satisfying $\pi = \Pi' \pi$.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{P}] Transition matrix (rows sum to 1).
     \item[\texttt{method}] Either \texttt{"eigen"} (find unit eigenvalue) or \texttt{"iterate"} (power iteration).
     \item[\texttt{tol}] Convergence tolerance for iteration method.
-\end{itemize}
+\end{arglist}
 
 \returns{1D array of stationary probabilities summing to 1.}
 
@@ -924,12 +1011,12 @@ def simulate_markov(
 \textbf{Purpose:} Simulate a sample path of Markov chain indices.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{P}] Transition matrix.
     \item[\texttt{s0}] Initial state index.
     \item[\texttt{T}] Number of periods to simulate.
     \item[\texttt{random\_state}] Seed for reproducibility.
-\end{itemize}
+\end{arglist}
 
 \returns{1D integer array of state indices over time.}
 
@@ -1035,6 +1122,47 @@ def toc() -> float
 
 \textbf{Purpose:} MATLAB-style timing. Call \texttt{tic()} to start timer, \texttt{toc()} to get elapsed seconds.
 
+% ------------------------------------------------------------------
+\section{Examples and Validation}
+% ------------------------------------------------------------------
+
+\subsection{\texttt{grids.py}}
+
+\textbf{Purpose:} This section validates the grid constructors with small, visual tests. The examples are generated in the notebook:
+\texttt{hetmacro/notebooks/test\_grids.ipynb}.
+
+\noindent \textbf{Notebook reference:}
+\begin{lstlisting}
+# Notebook used to generate figures
+hetmacro/notebooks/test_grids.ipynb
+\end{lstlisting}
+
+\noindent \textbf{Results:} The figures below illustrate spacing behavior, concentration around kinks, and the curse-of-dimensionality comparison between tensor and Smolyak grids.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/grids_asset_spacing.png}
+    \caption{Asset grid spacing comparison: linear, power, double-exponential, and Chebyshev.}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/grids_concentration.png}
+    \caption{Concentrated grid points around a kink at $a=10$ using \texttt{concentration\_points}.}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/grids_income_spacing.png}
+    \caption{Income grid spacing: log-spaced vs Chebyshev nodes on a bounded interval.}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/grids_tensor_vs_smolyak.png}
+    \caption{Tensor product vs Smolyak sparse grid (2D), highlighting point-count reduction.}
+\end{figure}
+
 % ==================================================================
 \chapter{Heterogeneous Agent Tools}
 % ==================================================================
@@ -1082,7 +1210,7 @@ def backward_egm(
 \end{enumerate}
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{Va}] Marginal value of assets, shape \texttt{(n\_e, n\_a)}.
     \item[\texttt{Pi}] Income transition matrix, shape \texttt{(n\_e, n\_e)}.
     \item[\texttt{a\_grid}] Asset grid, shape \texttt{(n\_a,)}.
@@ -1090,7 +1218,7 @@ def backward_egm(
     \item[\texttt{r}] Interest rate.
     \item[\texttt{beta}] Discount factor.
     \item[\texttt{eis}] Elasticity of intertemporal substitution ($= 1/\gamma$ for CRRA).
-\end{itemize}
+\end{arglist}
 
 \returns{Tuple \texttt{(Va\_new, a\_policy, c\_policy)} of updated marginal value and policy functions.}
 
@@ -1151,11 +1279,11 @@ def policy_iteration(
 \textbf{Purpose:} Iterate backward steps until policy functions converge.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{method}] Either \texttt{"egm"} or \texttt{"vfi"}.
     \item[\texttt{tol}] Convergence tolerance on policy function.
     \item[\texttt{max\_iter}] Maximum iterations.
-\end{itemize}
+\end{arglist}
 
 \returns{Converged \texttt{(Va, a\_policy, c\_policy)}.}
 
@@ -1188,12 +1316,12 @@ def forward_iteration(
 \textbf{Purpose:} Single forward step for distribution. Given current distribution $D$, compute next period's distribution after agents save according to policy and income transitions.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{D}] Current distribution, shape \texttt{(n\_e, n\_a)}.
     \item[\texttt{Pi}] Income transition matrix.
     \item[\texttt{a\_i}] Lottery lower indices from \texttt{get\_lottery}.
     \item[\texttt{a\_pi}] Lottery probabilities from \texttt{get\_lottery}.
-\end{itemize}
+\end{arglist}
 
 \returns{Next period's distribution, same shape as \texttt{D}.}
 
@@ -1214,13 +1342,13 @@ def stationary_distribution(
 \textbf{Purpose:} Compute stationary distribution by iterating \texttt{forward\_iteration} until convergence.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{Pi}] Income transition matrix.
     \item[\texttt{a\_policy}] Asset policy function, shape \texttt{(n\_e, n\_a)}.
     \item[\texttt{a\_grid}] Asset grid.
     \item[\texttt{tol}] Convergence tolerance.
     \item[\texttt{max\_iter}] Maximum iterations.
-\end{itemize}
+\end{arglist}
 
 \returns{Stationary distribution $D^*$, shape \texttt{(n\_e, n\_a)}, summing to 1.}
 
@@ -1265,11 +1393,11 @@ def household_steady_state(
 \textbf{Purpose:} Solve for household policies and distribution \emph{given} prices. This is the ``partial equilibrium'' household block.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{Pi, a\_grid, y, r, beta, eis}] Model parameters.
     \item[\texttt{method}] Solution method (\texttt{"egm"} or \texttt{"vfi"}).
     \item[\texttt{tol}] Convergence tolerance.
-\end{itemize}
+\end{arglist}
 
 \returns{Dictionary containing:}
 \begin{itemize}
@@ -1298,13 +1426,13 @@ def market_clearing(
 \textbf{Purpose:} Find equilibrium interest rate using bisection on excess demand.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{r\_bounds}] Tuple \texttt{(r\_low, r\_high)} bracketing equilibrium rate.
     \item[\texttt{household\_ss\_func}] Function mapping $r \mapsto$ household steady state dict.
     \item[\texttt{K\_demand\_func}] Function mapping $r \mapsto$ capital demand.
     \item[\texttt{tol}] Tolerance on excess demand.
     \item[\texttt{max\_iter}] Maximum bisection iterations.
-\end{itemize}
+\end{arglist}
 
 \returns{Household steady state dict at equilibrium $r^*$.}
 
@@ -1353,11 +1481,11 @@ def jacobian(
 \textbf{Purpose:} Compute Jacobians of aggregate outputs (A, C) with respect to input shocks.
 
 \textbf{Arguments:}
-\begin{itemize}[leftmargin=2cm]
+\begin{arglist}
     \item[\texttt{ss}] Steady state dict from \texttt{household\_steady\_state}.
     \item[\texttt{shocks}] Dict mapping shock names to input perturbations. E.g., \texttt{\{"r": \{"r": 1.0\}\}} for interest rate shock.
     \item[\texttt{T}] Horizon length.
-\end{itemize}
+\end{arglist}
 
 \returns{Nested dict: \texttt{Js["A"]["r"]} is the $T \times T$ Jacobian of assets w.r.t. interest rate.}
 

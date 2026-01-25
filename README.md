@@ -2,6 +2,13 @@
 
 This repository provides a foundational numerical toolkit (`hetmacro`) for solving macroeconomic models with heterogeneity. The package is designed to be **self-contained** (no external dependencies on QuantEcon/CompEcon), while still following their algorithmic best practices.
 
+At a high level, the toolkit supports the standard computational pipeline:
+1. Build state grids for continuous variables and discretize shocks.
+2. Solve household problems via EGM or VFI (backward iteration).
+3. Compute stationary distributions (forward iteration).
+4. Clear markets and compute aggregates.
+5. (Optional) Compute sequence-space Jacobians for dynamics.
+
 ## Project Goals
 
 1. Build a general-purpose numerical foundation for computational macroeconomics.
@@ -26,6 +33,8 @@ hetmacro/
   steady_state.py
   backward.py
   forward.py
+  notebooks/
+    test_grids.ipynb
   models/
     aiyagari.py
 
@@ -56,6 +65,10 @@ requirements.txt
 - `ssj.py` — sequence-space Jacobians (fake news algorithm).
 - `models/aiyagari.py` — example Aiyagari steady-state solver.
 
+## Examples and Notebooks
+
+- `hetmacro/notebooks/test_grids.ipynb` — visual tests for grid construction (asset grids, concentration, tensor vs Smolyak).
+
 ## Documentation
 
 - `codebook.md` — plain-text codebook.
@@ -74,4 +87,9 @@ Example usage (Aiyagari steady state):
 from hetmacro.models.aiyagari import solve_steady_state
 ss = solve_steady_state()
 ```
+
+### Running the notebooks
+1. Create and activate a Python environment (3.11+ recommended).
+2. Install dependencies from `requirements.txt`.
+3. Open `hetmacro/notebooks/test_grids.ipynb` and run all cells.
 

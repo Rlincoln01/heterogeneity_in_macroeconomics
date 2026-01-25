@@ -1,6 +1,7 @@
 """Grid construction tools for computational economics."""
 
 from dataclasses import dataclass
+from itertools import product
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -127,9 +128,22 @@ def make_grid_1d(
 def make_grid_nd(
     specs: Sequence[GridSpec],
     cartesian: bool = False,
+    tensor: bool = False,
     order: str = "C",
 ) -> Tuple[List[np.ndarray], Optional[np.ndarray]]:
-    """Construct a multi-dimensional grid from a list of GridSpec."""
+    """Construct a multi-dimensional grid from a list of GridSpec.
+
+    Parameters
+    ----------
+    specs : sequence of GridSpec
+        One GridSpec per dimension.
+    cartesian : bool, optional
+        If True, return the Cartesian product as a 2D array (n_prod, d).
+    tensor : bool, optional
+        If True, return a tensor grid with shape (n1, n2, ..., nd, d).
+    order : str, optional
+        Memory order for Cartesian output ('C' or 'F').
+    """
     grids = [
         make_grid_1d(
             spec.lower,
@@ -144,8 +158,12 @@ def make_grid_nd(
         )
         for spec in specs
     ]
+    if cartesian and tensor:
+        raise ValueError("cartesian and tensor cannot both be True")
     if cartesian:
         return grids, cartesian_product(*grids, order=order)
+    if tensor:
+        return grids, tensor_product(*grids)
     return grids, None
 
 
@@ -166,6 +184,15 @@ def cartesian_product(*grids: Iterable[float], order: str = "C") -> np.ndarray:
 def gridmake(*grids: Iterable[float], order: str = "C") -> np.ndarray:
     """Compatibility alias for cartesian_product."""
     return cartesian_product(*grids, order=order)
+
+
+def tensor_product(*grids: Iterable[float]) -> np.ndarray:
+    """Tensor product grid with shape (n1, n2, ..., nd, d)."""
+    grids = [np.asarray(g) for g in grids]
+    if not grids:
+        return np.empty((0, 0))
+    meshes = np.meshgrid(*grids, indexing="ij")
+    return np.stack(meshes, axis=-1)
 
 
 def _apply_concentration(
@@ -201,4 +228,83 @@ def _apply_concentration(
     x = np.clip(x, lower, upper)
     x = np.sort(x)
     return x
+
+
+def smolyak_sparse_grid(
+    specs: Sequence[GridSpec],
+    level: int,
+    rule: str = "clenshaw_curtis",
+    unique_decimals: int = 14,
+) -> np.ndarray:
+    """Construct a Smolyak sparse grid on hyper-rectangles.
+
+    Parameters
+    ----------
+    specs : sequence of GridSpec
+        One GridSpec per dimension. Only lower/upper bounds are used.
+    level : int
+        Smolyak level (>= 1). Higher levels add more points.
+    rule : str, optional
+        1D nested rule. Currently supports 'clenshaw_curtis'.
+    unique_decimals : int, optional
+        Decimal rounding for deduplicating points.
+
+    Returns
+    -------
+    ndarray
+        Sparse grid points of shape (n_points, d) in the original bounds.
+    """
+    if level < 1:
+        raise ValueError("level must be >= 1")
+    d = len(specs)
+    if d == 0:
+        return np.empty((0, 0))
+
+    rule = rule.lower()
+    if rule != "clenshaw_curtis":
+        raise ValueError("Only 'clenshaw_curtis' rule is supported")
+
+    # Precompute 1D nodes per level in [-1, 1]
+    nodes_1d = {l: _clenshaw_curtis_nodes(l) for l in range(1, level + 1)}
+
+    points = []
+    for index in _smolyak_indices(d, level):
+        grids = [nodes_1d[i] for i in index]
+        mesh = np.meshgrid(*grids, indexing="ij")
+        pts = np.stack([m.reshape(-1) for m in mesh], axis=1)
+        points.append(pts)
+
+    all_points = np.vstack(points) if points else np.empty((0, d))
+    if all_points.size == 0:
+        return all_points
+
+    rounded = np.round(all_points, unique_decimals)
+    unique_points = np.unique(rounded, axis=0)
+
+    # Scale from [-1, 1] to [lower, upper] for each dimension
+    lower = np.array([spec.lower for spec in specs], dtype=float)
+    upper = np.array([spec.upper for spec in specs], dtype=float)
+    scaled = 0.5 * (unique_points + 1.0) * (upper - lower) + lower
+    return scaled
+
+
+def _clenshaw_curtis_nodes(level: int) -> np.ndarray:
+    """Nested Clenshaw-Curtis nodes on [-1, 1] for a given level."""
+    if level < 1:
+        raise ValueError("level must be >= 1")
+    if level == 1:
+        return np.array([0.0])
+    n = 2 ** (level - 1) + 1
+    k = np.arange(n)
+    return np.cos(np.pi * k / (n - 1))
+
+
+def _smolyak_indices(dim: int, level: int) -> List[Tuple[int, ...]]:
+    """Multi-index set for Smolyak construction."""
+    max_level = level
+    indices = []
+    for idx in product(range(1, max_level + 1), repeat=dim):
+        if sum(idx) <= level + dim - 1:
+            indices.append(idx)
+    return indices
 
