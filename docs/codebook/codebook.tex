@@ -1,0 +1,139 @@
+% ==================================================================
+% hetmacro Codebook (LaTeX)
+% Template adapted from macro_bible.tex
+% ==================================================================
+\documentclass[12pt]{book}
+
+% Style switch
+\newif\ifmyoption
+\myoptiontrue
+
+% Core settings & fonts
+\usepackage[T1]{fontenc}
+\usepackage[sc]{mathpazo}
+\usepackage{geometry}
+\geometry{top=1in, bottom=1in, left=1in, right=1in}
+\usepackage[Sonny]{fncychap}
+
+% General utilities
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{setspace}
+\usepackage{csquotes}
+
+% Mathematics
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+
+% Code listings
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  showstringspaces=false
+}
+
+% Hyperref
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue]{hyperref}
+
+% Document metadata
+\title{\vspace{-1cm}\textbf{hetmacro Codebook}}
+\author{Rafael Lincoln \\ New York University}
+\date{January 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\pagebreak
+
+\begin{onehalfspacing}
+
+\chapter{Overview}
+This codebook documents the \texttt{hetmacro} package for numerical tools in macroeconomics with heterogeneity. The package is designed to be self-contained and modular, with a foundations-first architecture.
+
+\chapter{Foundational Modules}
+
+\section{\texttt{grids.py}}
+\begin{itemize}
+  \item \texttt{GridSpec}: specification for one grid dimension
+  \item \texttt{make\_grid\_1d}: flexible spacing and concentration
+  \item \texttt{make\_grid\_nd}: build multi-dimensional grids
+  \item \texttt{cartesian\_product}, \texttt{gridmake}
+  \item \texttt{make\_asset\_grid}, \texttt{double\_exponential\_grid}, \texttt{log\_spaced\_grid}
+\end{itemize}
+
+\section{\texttt{quadrature.py}}
+Gaussian and Newton--Cotes quadrature rules.
+\begin{itemize}
+  \item \texttt{qnwlege}, \texttt{qnwcheb}, \texttt{qnwnorm}
+  \item \texttt{qnwlogn}, \texttt{qnwunif}, \texttt{qnwbeta}, \texttt{qnwgamma}
+  \item \texttt{qnwsimp}, \texttt{qnwtrap}
+  \item \texttt{qnwnorm\_mv}
+\end{itemize}
+
+\section{\texttt{interpolation.py}}
+\begin{itemize}
+  \item \texttt{interp\_linear}, \texttt{interp\_bilinear}
+  \item \texttt{get\_lottery}
+  \item Spline and Chebyshev tools: \texttt{spline\_coef}, \texttt{cheb\_coef}, \texttt{cheb\_eval}
+\end{itemize}
+
+\section{\texttt{optimize.py}}
+Root-finding and optimization wrappers.
+\begin{itemize}
+  \item \texttt{bisect}, \texttt{brentq}, \texttt{newton}, \texttt{secant}, \texttt{broyden}
+  \item \texttt{golden\_search}, \texttt{brent\_min}, \texttt{nelder\_mead}
+\end{itemize}
+
+\section{\texttt{markov.py}}
+\begin{itemize}
+  \item \texttt{rouwenhorst}, \texttt{tauchen}
+  \item \texttt{stationary\_distribution}, \texttt{simulate\_markov}
+\end{itemize}
+
+\section{\texttt{utils.py}}
+\begin{itemize}
+  \item \texttt{crra\_utility}, \texttt{crra\_marginal}, \texttt{crra\_inverse\_marginal}
+  \item \texttt{ces\_aggregator}
+  \item \texttt{compute\_fixed\_point}, \texttt{numerical\_derivative}, \texttt{numerical\_jacobian}
+  \item \texttt{tic}, \texttt{toc}
+\end{itemize}
+
+\chapter{Heterogeneous Agent Tools}
+
+\section{\texttt{backward.py} and \texttt{dp\_tools.py}}
+\begin{itemize}
+  \item \texttt{backward\_egm}, \texttt{backward\_vfi}
+  \item \texttt{policy\_iteration}, \texttt{solve\_steady\_policy}
+\end{itemize}
+
+\section{\texttt{forward.py} and \texttt{distributions.py}}
+\begin{itemize}
+  \item \texttt{forward\_iteration}, \texttt{stationary\_distribution}
+  \item \texttt{stationary\_distribution\_ha}, \texttt{lottery\_indices}
+\end{itemize}
+
+\section{\texttt{steady\_state.py}}
+\begin{itemize}
+  \item \texttt{household\_steady\_state}
+  \item \texttt{market\_clearing}
+\end{itemize}
+
+\section{\texttt{ssj.py}}
+\begin{itemize}
+  \item \texttt{jacobian}, \texttt{step1\_backward}, \texttt{J\_from\_F}
+\end{itemize}
+
+\chapter{Example Model}
+
+\section{\texttt{models/aiyagari.py}}
+\begin{itemize}
+  \item \texttt{solve\_steady\_state}: steady-state solution of Aiyagari model
+\end{itemize}
+
+\end{onehalfspacing}
+\end{document}
+
