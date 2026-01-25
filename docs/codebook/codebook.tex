@@ -467,6 +467,100 @@ where $\{x_i\}$ are nodes and $\{w_i\}$ are weights chosen to make the approxima
 
 \textbf{Key insight:} Different distributions require different quadrature rules. Gauss-Hermite is optimal for normally distributed shocks; Gauss-Legendre for bounded uniform distributions.
 
+\subsubsection{Theory: Gaussian Quadrature}
+
+Gaussian quadrature is a family of methods for approximating integrals of the form:
+\[
+\int_a^b f(x) \, w(x) \, dx \approx \sum_{i=1}^{n} w_i \, f(x_i)
+\]
+where $w(x)$ is a \textbf{weighting function} (not to be confused with the quadrature weights $w_i$).
+
+The key insight is that if the nodes $\{x_i\}$ are chosen as the roots of orthogonal polynomials associated with $w(x)$, then the approximation is \textbf{exact for polynomials of degree up to $2n-1$}. This is twice as accurate as methods with equally-spaced nodes (like Simpson or Trapezoidal rules).
+
+Each quadrature rule in this module corresponds to a specific weighting function and its associated orthogonal polynomials:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Function} & \textbf{Weight function $w(x)$} & \textbf{Domain} & \textbf{Orthogonal Polynomial} \\
+\midrule
+\texttt{qnwlege} & $1$ (uniform) & $[a, b]$ & Legendre \\
+\texttt{qnwcheb} & $1/\sqrt{1-x^2}$ & $[-1, 1]$ & Chebyshev \\
+\texttt{qnwnorm} & $e^{-x^2}$ (Gaussian) & $(-\infty, \infty)$ & Hermite \\
+\texttt{qnwbeta} & $x^{a-1}(1-x)^{b-1}$ & $[0, 1]$ & Jacobi \\
+\texttt{qnwgamma} & $x^{a-1}e^{-x}$ & $[0, \infty)$ & Laguerre \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Why different rules?} Each rule places nodes where the weight function $w(x)$ concentrates probability mass:
+\begin{itemize}
+    \item \textbf{Gauss-Hermite} (\texttt{qnwnorm}): Nodes cluster around the mean. Optimal for normal distributions---the workhorse for computing expectations over income shocks.
+    \item \textbf{Gauss-Legendre} (\texttt{qnwlege}): Nodes spread across the interval with slight concentration at endpoints. Best for smooth functions on bounded intervals.
+    \item \textbf{Gauss-Chebyshev} (\texttt{qnwcheb}): Nodes are Chebyshev points (cosines of equally-spaced angles). Optimal for polynomial interpolation and avoids Runge's phenomenon.
+    \item \textbf{Gauss-Jacobi} (\texttt{qnwbeta}): Handles Beta distributions on $[0,1]$.
+    \item \textbf{Gauss-Laguerre} (\texttt{qnwgamma}): For Gamma distributions with positive support.
+\end{itemize}
+
+\paragraph{Convenience wrappers.} Some functions adapt the basic rules for common use cases:
+\begin{itemize}
+    \item \texttt{qnwlogn}: Transforms Hermite nodes via exponentiation for lognormal distributions.
+    \item \texttt{qnwunif}: Adapts Legendre and normalizes weights for uniform density.
+    \item \texttt{qnwnorm\_mv}: Tensor product of Hermite rules for multivariate normal.
+\end{itemize}
+
+\paragraph{Non-Gaussian rules.} The functions \texttt{qnwsimp} (Simpson) and \texttt{qnwtrap} (Trapezoidal) are \textbf{Newton-Cotes} quadrature, which use equally-spaced nodes. These are simpler but less accurate for smooth functions. Use them when function values are only available on a pre-specified grid.
+
+\subsection{Function: \texttt{qnwlege}}
+
+\begin{lstlisting}
+def qnwlege(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]
+\end{lstlisting}
+
+\textbf{Purpose:} Gauss-Legendre quadrature for integrals over bounded intervals $[a, b]$. The weighting function is $w(x) = 1$ (uniform), so this approximates:
+\[
+\int_a^b f(x) \, dx \approx \sum_{i=1}^{n} w_i \, f(x_i)
+\]
+
+\textbf{Arguments:}
+\begin{arglist}
+    \item[\texttt{n}] Number of nodes. With $n$ nodes, polynomials of degree $\leq 2n-1$ are integrated exactly.
+    \item[\texttt{a, b}] Integration bounds.
+\end{arglist}
+
+\returns{Tuple \texttt{(nodes, weights)} for approximating $\int_a^b f(x) dx$.}
+
+\textbf{When to use:} General-purpose integration on bounded intervals. Optimal for smooth functions.
+
+\subsection{Function: \texttt{qnwcheb}}
+
+\begin{lstlisting}
+def qnwcheb(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]
+\end{lstlisting}
+
+\textbf{Purpose:} Gauss-Chebyshev quadrature with weighting function $w(x) = 1/\sqrt{1-x^2}$. Approximates:
+\[
+\int_a^b \frac{f(x)}{\sqrt{1-x^2}} \, dx \approx \sum_{i=1}^{n} w_i \, f(x_i)
+\]
+where $x$ is scaled from $[a,b]$ to $[-1,1]$.
+
+\textbf{Arguments:}
+\begin{arglist}
+    \item[\texttt{n}] Number of nodes (Chebyshev points).
+    \item[\texttt{a, b}] Integration bounds (mapped to $[-1,1]$).
+\end{arglist}
+
+\returns{Tuple \texttt{(nodes, weights)}.}
+
+\textbf{When to use:} 
+\begin{itemize}
+    \item When constructing Chebyshev polynomial approximations (nodes are optimal interpolation points).
+    \item For integrals with weight function $1/\sqrt{1-x^2}$.
+    \item When you want to avoid Runge's phenomenon in polynomial interpolation.
+\end{itemize}
+
+\textbf{Special property:} The Chebyshev nodes are $x_i = \cos\left(\frac{2i-1}{2n}\pi\right)$ for $i=1,\ldots,n$, which are cosines of equally-spaced angles.
+
 \subsection{Function: \texttt{qnwnorm}}
 
 \begin{lstlisting}
@@ -518,22 +612,6 @@ def qnwlogn(
 \textbf{Purpose:} Quadrature for lognormal distributions. If $\log X \sim \mathcal{N}(\mu, \sigma^2)$, this provides nodes and weights for $\mathbb{E}[f(X)]$.
 
 \textbf{Note:} The nodes are exponentiated Gauss-Hermite nodes; weights remain the same.
-
-\subsection{Function: \texttt{qnwlege}}
-
-\begin{lstlisting}
-def qnwlege(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]
-\end{lstlisting}
-
-\textbf{Purpose:} Gauss-Legendre quadrature for integrals over bounded intervals $[a, b]$. Optimal for smooth functions on compact domains.
-
-\textbf{Arguments:}
-\begin{arglist}
-    \item[\texttt{n}] Number of nodes.
-    \item[\texttt{a, b}] Integration bounds.
-\end{arglist}
-
-\returns{Tuple \texttt{(nodes, weights)} for approximating $\int_a^b f(x) dx$.}
 
 \subsection{Function: \texttt{qnwunif}}
 
@@ -1162,6 +1240,57 @@ hetmacro/notebooks/test_grids.ipynb
     \includegraphics[width=0.95\textwidth]{figures/grids_tensor_vs_smolyak.png}
     \caption{Tensor product vs Smolyak sparse grid (2D), highlighting point-count reduction.}
 \end{figure}
+
+\subsection{\texttt{quadrature.py}}
+
+\textbf{Purpose:} This section validates the quadrature functions with visual tests showing node placement, weight distribution, and accuracy. The examples are generated in the notebook:
+\texttt{hetmacro/notebooks/test\_quadrature.ipynb}.
+
+\noindent \textbf{Notebook reference:}
+\begin{lstlisting}
+# Notebook used to generate figures
+hetmacro/notebooks/test_quadrature.ipynb
+\end{lstlisting}
+
+\noindent \textbf{Results:} Figure~\ref{fig:quadrature} displays all quadrature rules in a single panel. Each subplot shows nodes (circles, size proportional to weight) superimposed on the relevant function or PDF. The numerical tests in the notebook verify that all approximations match analytical values to high precision.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/quadrature_visual_verification.png}
+    \caption{Quadrature rules: visual verification of node placement and weights.}
+    \label{fig:quadrature}
+\end{figure}
+
+\noindent \textbf{Subplot explanation:}
+
+\begin{description}[style=nextline,leftmargin=1.5em]
+    \item[Row 1 -- Gaussian quadrature (bounded and unbounded intervals)]
+    \begin{itemize}
+        \item \textbf{Gauss-Legendre:} Nodes for \texttt{qnwlege} on $[0,1]$ integrating $f(x)=x^5$. Nodes spread across the interval with weights (circle sizes) roughly uniform---optimal for smooth functions on bounded domains.
+        \item \textbf{Gauss-Chebyshev:} Nodes for \texttt{qnwcheb} shown with the weight function $w(x)=1/\sqrt{1-x^2}$. Nodes cluster near endpoints where the weight function diverges---these are the Chebyshev points, optimal for polynomial interpolation.
+        \item \textbf{Gauss-Hermite (Normal):} Nodes for \texttt{qnwnorm} overlaid on a normal PDF. Nodes cluster around the mean where probability mass concentrates, with larger weights (bigger circles) near the center.
+    \end{itemize}
+
+    \item[Row 2 -- Distribution-specific rules]
+    \begin{itemize}
+        \item \textbf{Lognormal:} Nodes for \texttt{qnwlogn} on the lognormal PDF. These are exponentiated Hermite nodes, naturally clustering where the skewed distribution has most mass.
+        \item \textbf{Uniform:} Nodes for \texttt{qnwunif} on $[0,2]$. This is Legendre quadrature with weights normalized to sum to 1 (a probability distribution).
+        \item \textbf{Simpson vs Trapezoid:} Newton-Cotes rules (\texttt{qnwsimp}, \texttt{qnwtrap}) for $\int_0^\pi \sin(x)\,dx = 2$. Both use equally-spaced nodes, but Simpson achieves higher accuracy through cubic interpolation.
+    \end{itemize}
+
+    \item[Row 3 -- Beta, Gamma, and multivariate normal]
+    \begin{itemize}
+        \item \textbf{Beta:} Nodes for \texttt{qnwbeta} with Beta$(2,5)$ PDF. Gauss-Jacobi nodes concentrate where the asymmetric Beta density peaks.
+        \item \textbf{Gamma:} Nodes for \texttt{qnwgamma} with Gamma$(2,3)$ PDF. Gauss-Laguerre nodes cover the positive support, clustering near the mode.
+        \item \textbf{Multivariate Normal (2D):} Tensor-product nodes from \texttt{qnwnorm\_mv} for a bivariate normal with correlation $\rho=0.3$. The elliptical pattern reflects the covariance structure; larger circles indicate higher-weight nodes near the mean.
+    \end{itemize}
+
+    \item[Row 4 -- Curse of dimensionality]
+    \begin{itemize}
+        \item \textbf{Node growth:} Total number of tensor-product nodes grows exponentially: $n^d$ for $n$ nodes per dimension in $d$ dimensions. With $n=5$, we have 5, 25, 125, 625, 3125 nodes for $d=1,\ldots,5$.
+        \item \textbf{Error growth:} Despite exponentially more nodes, approximation error for $\mathbb{E}[\exp(\sum_i x_i)]$ under standard normal increases with dimension, illustrating the fundamental challenge of high-dimensional integration.
+    \end{itemize}
+\end{description}
 
 % ==================================================================
 \chapter{Heterogeneous Agent Tools}
