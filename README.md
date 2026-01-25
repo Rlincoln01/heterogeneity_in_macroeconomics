@@ -68,6 +68,7 @@ requirements.txt
 ## Examples and Notebooks
 
 - `hetmacro/notebooks/test_grids.ipynb` — visual tests for grid construction (asset grids, concentration, tensor vs Smolyak).
+- `hetmacro/notebooks/test_quadrature.ipynb` — validation and visual diagnostics for all quadrature rules (Legendre, Chebyshev, Hermite/Normal, Lognormal, Uniform, Beta, Gamma, multivariate normal), including a single summary figure and a curse-of-dimensionality check.
 
 ## Documentation
 
