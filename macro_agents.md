@@ -142,3 +142,12 @@ approx = np.dot(weights, f(nodes))
 - Beware the **curse of dimensionality**: tensor-product quadrature grows as n^d. For high dimensions, consider sparse grids or Monte Carlo.
 - When adding new models, place them under `hetmacro/models/` and reuse tools rather than re-implementing.
 
+---
+
+## CompEcon Comparison Notes
+
+- `qnwcheb` now supports `kind="clenshaw_curtis"` to match CompEcon’s `qnwcheb`. Default `kind="gauss"` retains Gauss‑Chebyshev weights.
+- `qnwbeta` weights are normalized to the Beta pdf (expectations now match analytical moments).
+- `qnwnorm` uses `sigma` (std) in hetmacro; CompEcon uses `sig2` (variance/covariance).
+- `gridmake` output orientation differs: hetmacro returns `(N,d)` while CompEcon returns `(d,N)`. Use `.T` when needed for compatibility.
+

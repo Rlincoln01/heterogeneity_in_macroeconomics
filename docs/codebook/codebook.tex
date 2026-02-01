@@ -535,10 +535,16 @@ def qnwlege(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]
 \subsection{Function: \texttt{qnwcheb}}
 
 \begin{lstlisting}
-def qnwcheb(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]
+def qnwcheb(n: int, a: float, b: float, kind: str = "gauss") -> Tuple[np.ndarray, np.ndarray]
 \end{lstlisting}
 
-\textbf{Purpose:} Gauss-Chebyshev quadrature with weighting function $w(x) = 1/\sqrt{1-x^2}$. Approximates:
+\textbf{Purpose:} Chebyshev-based quadrature on $[a,b]$. Two variants are supported:
+\begin{itemize}
+    \item \texttt{kind="gauss"} (default): Gauss-Chebyshev with weighting function $w(x)=1/\sqrt{1-x^2}$.
+    \item \texttt{kind="clenshaw\_curtis"}: Clenshaw--Curtis weights on Chebyshev nodes for unweighted integrals (CompEcon-compatible).
+\end{itemize}
+
+For the Gauss-Chebyshev case, this approximates:
 \[
 \int_a^b \frac{f(x)}{\sqrt{1-x^2}} \, dx \approx \sum_{i=1}^{n} w_i \, f(x_i)
 \]
@@ -548,6 +554,7 @@ where $x$ is scaled from $[a,b]$ to $[-1,1]$.
 \begin{arglist}
     \item[\texttt{n}] Number of nodes (Chebyshev points).
     \item[\texttt{a, b}] Integration bounds (mapped to $[-1,1]$).
+    \item[\texttt{kind}] Either \texttt{"gauss"} or \texttt{"clenshaw\_curtis"}.
 \end{arglist}
 
 \returns{Tuple \texttt{(nodes, weights)}.}
@@ -555,7 +562,8 @@ where $x$ is scaled from $[a,b]$ to $[-1,1]$.
 \textbf{When to use:} 
 \begin{itemize}
     \item When constructing Chebyshev polynomial approximations (nodes are optimal interpolation points).
-    \item For integrals with weight function $1/\sqrt{1-x^2}$.
+    \item For integrals with weight function $1/\sqrt{1-x^2}$ (\texttt{kind="gauss"}).
+    \item For unweighted integrals using Chebyshev nodes (\texttt{kind="clenshaw\_curtis"}).
     \item When you want to avoid Runge's phenomenon in polynomial interpolation.
 \end{itemize}
 
