@@ -1,0 +1,91 @@
+\section{Solving Linear Equations and Interpolation}
+
+\subsection{Vandermonde system}
+We solve the linear system \(Ax=b\) where \(A\in\mathbb{R}^{n\times n}\) is a Vandermonde-type matrix with entries
+\[
+  A_{ij} = i^{\,n-j}, \qquad i,j\in\{1,\dots,n\},
+\]
+and \(b\in\mathbb{R}^{n}\) has entries
+\[
+  b_i = \sum_{k=0}^{n-1} i^k
+  = \begin{cases}
+  n, & i=1,\\
+  \dfrac{i^n - 1}{i-1}, & i>1.
+  \end{cases}
+\]
+The true solution is \(x=\mathbf{1}\). We report the conditioning of \(A\) and the numerical errors \(\lVert x-\mathbf{1}\rVert_2\) and \(\lVert Ax-b\rVert_2\) for \(n\in\{5,10,15\}\).
+
+\begin{table}[H]
+\centering
+\caption{Vandermonde solve diagnostics}
+\label{tab:pset1-vandermonde}
+\begin{tabular}{rccc}
+\toprule
+\(n\) & \(\kappa_2(A)\) & \(\lVert x-\mathbf{1}\rVert_2\) & \(\lVert Ax-b\rVert_2\) \\
+\midrule
+5 & \(2.62\times 10^{4}\) & \(3.20\times 10^{-13}\) & \(1.14\times 10^{-13}\) \\
+10 & \(2.11\times 10^{12}\) & \(7.89\times 10^{-7}\) & \(1.81\times 10^{-7}\) \\
+15 & \(2.58\times 10^{21}\) & \(2.17\times 10^{2}\) & \(2.29\) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent where \(\kappa_2(A)\) is the condition number of \(A\) in the 2-norm, which is defined as:
+\begin{align}
+\kappa_2(A) = \|A\|_2 \|A^{-1}\|_2,
+\end{align}
+where $ \|A\|_2$ is the spectral norm of $A$, corresponding to the largest singular value of $A$. From Table~\ref{tab:pset1-vandermonde}, we see that the condition number grows rapidly as $n$ increases, indicating that the Vandermonde system is ill-conditioned. Hence, for $n$ values larger than 10, the solution is not accurate as columns become nearly linearly dependent in finite precision arithmetic.
+
+
+\subsection{Polynomial interpolation of \(\log(s)\)}
+We approximate \(f(s)=\log(s)\) on \(s\in[1,10]\) by a polynomial of degree \(n-1\),
+\[
+  \hat f_n(s)=x_1 + x_2 s + \dots + x_n s^{n-1}.
+\]
+We fit coefficients by (overdetermined) least squares using \(m=100\) equally-spaced points. For \(n\in\{5,10,15,20\}\) we plot the approximant on a fine grid and the approximation error \(\hat f_n(s)-\log(s)\), and we report the Euclidean norm of the error on the fine grid and the condition number of the regression matrix.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[
+  group style={group size=2 by 1, horizontal sep=1.4cm},
+  width=0.48\textwidth,
+  height=0.34\textwidth,
+  xlabel={$s$},
+  legend style={font=\footnotesize, cells={anchor=west}},
+]
+\nextgroupplot[
+  title={Polynomial approximations},
+  ylabel={$f(s)$},
+]
+\addplot[black, thick] table[x=s,y=true,col sep=comma]{problem1_poly_approx.csv};
+\addlegendentry{true}
+\addplot[blue] table[x=s,y=pred5,col sep=comma]{problem1_poly_approx.csv};
+\addlegendentry{$n=5$}
+\addplot[red] table[x=s,y=pred10,col sep=comma]{problem1_poly_approx.csv};
+\addlegendentry{$n=10$}
+\addplot[green!50!black] table[x=s,y=pred15,col sep=comma]{problem1_poly_approx.csv};
+\addlegendentry{$n=15$}
+\addplot[purple] table[x=s,y=pred20,col sep=comma]{problem1_poly_approx.csv};
+\addlegendentry{$n=20$}
+
+\nextgroupplot[
+  title={Approximation error},
+  ylabel={$\hat f_n(s)-\log(s)$},
+]
+\addplot[black, thin] coordinates {(1,0) (10,0)};
+\addplot[blue] table[x=s,y=err5,col sep=comma]{problem1_poly_approx.csv};
+\addplot[red] table[x=s,y=err10,col sep=comma]{problem1_poly_approx.csv};
+\addplot[green!50!black] table[x=s,y=err15,col sep=comma]{problem1_poly_approx.csv};
+\addplot[purple] table[x=s,y=err20,col sep=comma]{problem1_poly_approx.csv};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Polynomial approximations of $\log(s)$ (left) and approximation errors (right) for degrees $n-1$ with $n\in\{5,10,15,20\}$, using a monomial basis and least squares on $m=100$ grid points.}
+\label{fig:pset1-poly-approx}
+\end{figure}
+\vspace{1.5em}
+
+\noindent The key numerical lesson from Problem 1.1 carries over directly to polynomial approximation: the least-squares design matrix has columns $1,s,s^2,\dots,s^{n-1}$, so it is \emph{Vandermonde-like} in the monomial basis. As $n$ grows, the columns become increasingly ill-conditioned (similar to Table~\ref{tab:pset1-vandermonde}), so the fitted coefficients can become extremely sensitive to rounding error and to small perturbations in the data. Therefore, increasing $n$ does not guarantee a uniformly better approximation: the function space is richer, but numerical instability can dominate and produce oscillatory or distorted fits (often most visible near the boundaries of $[1,10]$) and non-monotone error behavior.
+
+
+
