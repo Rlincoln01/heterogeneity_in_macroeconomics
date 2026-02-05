@@ -35,15 +35,28 @@ hetmacro/
   forward.py
   notebooks/
     test_grids.ipynb
+    test_quadrature.ipynb
+    test_compecon_comparison.ipynb
   models/
+    __init__.py
     aiyagari.py
 
 docs/
   codebook/
-    codebook.tex
     codebook.pdf
+    figures/
+  compecon_comparison.md
 
-codebook.md
+examples/
+  README.md
+  pset1/
+    README.md
+    notebooks/
+      pset1_problem1.ipynb … pset1_problem5.ipynb
+    report/
+      pset1_report.pdf
+      figures/
+
 macro_agents.md
 requirements.txt
 ```
@@ -67,13 +80,18 @@ requirements.txt
 
 ## Examples and Notebooks
 
-- `hetmacro/notebooks/test_grids.ipynb` — visual tests for grid construction (asset grids, concentration, tensor vs Smolyak).
-- `hetmacro/notebooks/test_quadrature.ipynb` — validation and visual diagnostics for all quadrature rules (Legendre, Chebyshev, Hermite/Normal, Lognormal, Uniform, Beta, Gamma, multivariate normal), including a single summary figure and a curse-of-dimensionality check.
+**Package tests (hetmacro/notebooks/):**
+- `test_grids.ipynb` — visual tests for grid construction (asset grids, concentration, tensor vs Smolyak).
+- `test_quadrature.ipynb` — validation and visual diagnostics for quadrature rules (Legendre, Chebyshev, Hermite, etc.).
+- `test_compecon_comparison.ipynb` — comparison with CompEcon-style Broyden and quadrature.
+
+**Examples (examples/):**
+- `examples/pset1/` — Problem set 1 solutions: notebooks for each problem and report PDF (`report/pset1_report.pdf`). See `examples/pset1/README.md` for how to run.
 
 ## Documentation
 
-- `codebook.md` — plain-text codebook.
-- `docs/codebook/codebook.tex` — LaTeX codebook (compiled to PDF).
+- `docs/codebook/codebook.pdf` — codebook (PDF).
+- `docs/compecon_comparison.md` — notes on CompEcon comparison.
 - `macro_agents.md` — step-by-step guidance for AI agents and users.
 
 ## Getting Started
@@ -92,5 +110,5 @@ ss = solve_steady_state()
 ### Running the notebooks
 1. Create and activate a Python environment (3.11+ recommended).
 2. Install dependencies from `requirements.txt`.
-3. Open `hetmacro/notebooks/test_grids.ipynb` and run all cells.
+3. Run package tests from `hetmacro/notebooks/` or full PSet 1 from `examples/pset1/notebooks/` (notebooks auto-detect the repo root).
 
