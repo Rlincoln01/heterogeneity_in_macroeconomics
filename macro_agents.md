@@ -142,12 +142,260 @@ approx = np.dot(weights, f(nodes))
 - Beware the **curse of dimensionality**: tensor-product quadrature grows as n^d. For high dimensions, consider sparse grids or Monte Carlo.
 - When adding new models, place them under `hetmacro/models/` and reuse tools rather than re-implementing.
 
+## Broyden methods: when to use which
+
+The package exposes a **unified Broyden solver** via `hetmacro.optimize.broyden(f, x0, method=..., ...)` with three methods. Use the one that matches your problem:
+
+| Situation | Method | Call | Notes |
+|-----------|--------|------|--------|
+| **Full coupled system** \(F(h)=0\) in one shot (e.g. equilibrium residuals in all \(n\) unknowns) | `'compecon'` | `broyden(f, x0, method='compecon', tol=..., max_iter=...)` | CompEcon-style: inverse Jacobian, backstepping line search, restarts. Prefer this over `'scipy'` for nonlinear/ill-scaled systems; SciPy’s Broyden can diverge. |
+| **Same full system** but you want a minimal wrapper | `'scipy'` | `broyden(f, x0, method='scipy', ...)` | Thin wrapper around `scipy.optimize.root(..., method='broyden1')`. Use only for well-behaved systems. |
+| **Vectorized, largely componentwise** (e.g. many independent 1D FOCs with bounds \(a \le x \le b\)) | `'componentwise'` | `broyden(f, x0, method='componentwise', a=a, b=b, ...)` | MATLAB-style safeguarded componentwise Broyden; **requires** bounds `a` and `b`. Use for inner loop (e.g. household FOCs given wages) in a wage fixed-point iteration. |
+
+**Rule of thumb:** For equilibrium systems that are strongly coupled and possibly ill-scaled (e.g. labor supply equilibrium \(F(h)=0\) over many nodes), use **`method='compecon'`**. For the inner step of a fixed-point iteration where you solve many independent equations with bounds (e.g. FOC for \(h_i\) given \(W\)), use **`method='componentwise'`** with `a`, `b` set to your bounds.
+
 ---
 
-## CompEcon Comparison Notes
+## Optimization Methods
 
-- `qnwcheb` now supports `kind="clenshaw_curtis"` to match CompEcon’s `qnwcheb`. Default `kind="gauss"` retains Gauss‑Chebyshev weights.
+### When to Use Each Optimizer
+
+| Method | Use Case | Pros | Cons |
+|--------|----------|------|------|
+| `nelder_mead` | Derivative-free, noisy objectives | Robust, no gradients needed | Slow, finds local minima |
+| `golden_search` | 1D smooth functions | Fast, reliable | 1D only |
+| `brent_min` | 1D with bounds | Superlinear convergence | 1D only |
+
+### Nelder-Mead for Calibration
+
+Best for:
+- Moment matching (objective is simulation-based, noisy)
+- Non-smooth or discontinuous loss functions
+- When gradients are unavailable or expensive
+
+**Workflow:**
+```python
+from hetmacro.optimize import nelder_mead
+import numpy as np
+
+def sse_loss(params):
+    """Sum of squared errors between model and target moments."""
+    model_moments = simulate_model(params)
+    return np.sum((model_moments - target_moments)**2)
+
+# Initial guess
+x0 = np.array([0.9, 0.1, 0.05])
+
+# Optimize with history tracking
+params_opt, sse_opt, hist = nelder_mead(sse_loss, x0, return_info=True)
+```
+
+### Convergence Diagnostics
+
+When `return_info=True`, `nelder_mead` returns a history dict with:
+- `hist['f']`: objective value at each iteration (plot to check convergence)
+- `hist['x']`: parameter vectors at each iteration
+
+**Diagnostic checklist:**
+1. Plot `hist['f']` to verify SSE decreases and stabilizes
+2. Check that final simplex is small (parameters converged)
+3. Restart from different initial points to check for local minima
+4. If SSE is large, consider model misspecification
+
+```python
+import matplotlib.pyplot as plt
+
+# Plot SSE trace
+plt.plot(hist['f'])
+plt.xlabel('Iteration')
+plt.ylabel('SSE')
+plt.yscale('log')
+plt.title('Nelder-Mead Convergence')
+plt.show()
+```
+
+---
+
+## Calibration Workflows
+
+### Method of Simulated Moments (MSM)
+
+When analytical moments are unavailable, calibrate by simulation:
+
+1. **Define target moments** from empirical data
+2. **Write simulation function** that takes parameters and returns model moments
+3. **Construct SSE loss** measuring distance to targets
+4. **Optimize** with `nelder_mead`
+
+### Example: Income Process Calibration
+
+Target moments:
+- sd(log y), sd(Δ log y)
+- Autocorrelations at lags 1, 3, 5
+
+Parameters to calibrate:
+- ρ (persistence)
+- σ_u (innovation std)
+- σ_ε (measurement error std)
+
+```python
+import numpy as np
+from hetmacro.optimize import nelder_mead
+
+# Target moments from data
+target = {
+    'sd_logy': 0.92,
+    'sd_dlogy': 0.35,
+    'acf1': 0.89,
+    'acf3': 0.78,
+    'acf5': 0.71,
+}
+
+def simulate_income(rho, sigma_u, sigma_eps, T=10000, seed=42):
+    """Simulate AR(1) with measurement error."""
+    np.random.seed(seed)
+    logy = np.zeros(T)
+    for t in range(1, T):
+        logy[t] = rho * logy[t-1] + sigma_u * np.random.randn()
+    return logy + sigma_eps * np.random.randn(T)
+
+def compute_moments(logy_obs):
+    """Compute moments from simulated data."""
+    dlogy = np.diff(logy_obs)
+    return {
+        'sd_logy': np.std(logy_obs),
+        'sd_dlogy': np.std(dlogy),
+        'acf1': np.corrcoef(logy_obs[1:], logy_obs[:-1])[0,1],
+        'acf3': np.corrcoef(logy_obs[3:], logy_obs[:-3])[0,1],
+        'acf5': np.corrcoef(logy_obs[5:], logy_obs[:-5])[0,1],
+    }
+
+def sse_loss(params):
+    rho, sigma_u, sigma_eps = params
+    if rho <= 0 or rho >= 1 or sigma_u <= 0 or sigma_eps <= 0:
+        return 1e10  # penalty
+    logy_obs = simulate_income(rho, sigma_u, sigma_eps)
+    model = compute_moments(logy_obs)
+    return sum((model[k] - target[k])**2 for k in target)
+
+# Calibrate
+x0 = np.array([0.9, 0.2, 0.1])
+params_opt, sse_opt = nelder_mead(sse_loss, x0)
+print(f"rho={params_opt[0]:.3f}, sigma_u={params_opt[1]:.3f}, sigma_eps={params_opt[2]:.3f}")
+```
+
+### Extension: Jump-Diffusion for Fat Tails
+
+When Gaussian shocks don't match kurtosis in the data:
+
+```python
+def simulate_jump_diffusion(rho, sigma_u, sigma_eps, pi, mu_J, sigma_J, T=10000):
+    """AR(1) with jump component for fat tails.
+    
+    J_t = b_t * kappa_t where:
+      - b_t ~ Bernoulli(pi)
+      - kappa_t ~ N(mu_J, sigma_J^2)
+    """
+    np.random.seed(42)
+    logy = np.zeros(T)
+    for t in range(1, T):
+        jump = (np.random.rand() < pi) * (mu_J + sigma_J * np.random.randn())
+        logy[t] = rho * logy[t-1] + sigma_u * np.random.randn() + jump
+    return logy + sigma_eps * np.random.randn(T)
+```
+
+Ergodic variance formula for jump-diffusion:
+```
+Var(log y) = sigma_u^2 / (1 - rho^2) + pi * (mu_J^2 + sigma_J^2) / (1 - rho^2)
+```
+
+### Best Practices for Calibration
+
+1. **Multiple restarts**: Run from 5-10 different initial guesses
+2. **Check moment fit individually**: Which moments are hardest to match?
+3. **Increase simulation length**: Reduces Monte Carlo noise (T=50000+)
+4. **Parameter bounds**: Add penalty terms for invalid parameter regions
+5. **Weight matrix**: Consider weighting moments by inverse variance for efficiency
+
+---
+
+## Agent Playbooks (Reusable Templates)
+
+Copy-paste templates for common numerical tasks. For full theory, see Macro Bible Appendix B (Numerical Methods). For implementation details, see the codebook.
+
+### Playbook 1: Solve equilibrium system (root finding)
+
+**When:** Market clearing, FOC residuals, or any system \(F(x)=0\).
+
+1. Define residual function \(F\) (vector-valued).
+2. Choose initial guess (e.g. previous solution or simple heuristic).
+3. Call `broyden(f, x0, method='compecon', tol=1e-10)`.
+4. Check `info['converged']` and plot \(\|F(x^{(k)})\|\) vs iteration.
+
+**Template:**
+```python
+from hetmacro.optimize import broyden
+x_star, info = broyden(residual_fn, x0, method='compecon', tol=1e-10, return_info=True)
+if not info.get('converged', True):
+    # Try different x0 or componentwise with bounds
+    x_star, _ = broyden(residual_fn, x0, method='componentwise', a=lb, b=ub)
+```
+
+### Playbook 2: Calibrate by simulated moments
+
+**When:** Match model moments to data; no analytical moments.
+
+1. Define target moments (from data).
+2. Write `simulate(params)` returning model moments.
+3. Define `sse(params) = sum((simulate(params) - target)**2)`.
+4. Optimize with `nelder_mead(sse, x0, return_info=True)`.
+5. Plot `hist['f']` for convergence; restart from several `x0` if needed.
+
+**Template:**
+```python
+from hetmacro.optimize import nelder_mead
+params_opt, sse_opt, hist = nelder_mead(sse_loss, x0, return_info=True)
+# Optional: plot hist['f']; check final params and moment fit
+```
+
+### Playbook 3: Solve household dynamic programming
+
+**When:** Value function or policy for consumption-savings / income fluctuation.
+
+1. Build grids (`grids.py`) and income process (`markov.rouwenhorst`).
+2. Call `policy_iteration(..., method='egm')` or `method='vfi'`.
+3. Use `interp_linear` for off-grid evaluation; `get_lottery` for distribution iteration.
+
+**Template:**
+```python
+from hetmacro.grids import make_grid_1d
+from hetmacro.markov import rouwenhorst
+from hetmacro.backward import policy_iteration
+a_grid = make_grid_1d(0, 50, 200, spacing='power', power=2.0)
+e, Pi = rouwenhorst(n=7, rho=0.9, sigma=0.2)
+Va, a_pol, c_pol = policy_iteration(Pi, a_grid, np.exp(e), r, beta, eis, method='egm')
+```
+
+### Playbook 4: Euler equation time iteration and residuals
+
+**When:** Solve or check policy via Euler equation (no value function).
+
+1. Guess policy on grid; for each state, solve Euler residual = 0 for today’s choice (use `brentq` or `broyden` for 1D/vector).
+2. Use quadrature (`qnwnorm`, `qnwnorm_mv`) for expectations.
+3. Iterate until policy converges.
+4. **Diagnostic:** Compute Euler residual (LHS − RHS of Euler equation) over state space; plot or report max residual (should be small in interior).
+
+**Template:**
+```python
+from hetmacro.quadrature import qnwnorm_mv
+from hetmacro.optimize import broyden  # or brentq per state
+# ... define euler_residual(x, state); then solve per state
+# Diagnostic: residual = euler_lhs - euler_rhs; np.max(np.abs(residual))
+```
+
+---
+
+## CompEcon Comparison Notes- `qnwcheb` now supports `kind="clenshaw_curtis"` to match CompEcon’s `qnwcheb`. Default `kind="gauss"` retains Gauss‑Chebyshev weights.
 - `qnwbeta` weights are normalized to the Beta pdf (expectations now match analytical moments).
 - `qnwnorm` uses `sigma` (std) in hetmacro; CompEcon uses `sig2` (variance/covariance).
 - `gridmake` output orientation differs: hetmacro returns `(N,d)` while CompEcon returns `(d,N)`. Use `.T` when needed for compatibility.
-

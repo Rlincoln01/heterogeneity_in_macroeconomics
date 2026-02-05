@@ -17,37 +17,12 @@ def qnwlege(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]:
     return nodes, weights
 
 
-def qnwcheb(
-    n: int, a: float, b: float, kind: str = "gauss"
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Chebyshev-based nodes and weights on [a, b].
-
-    kind="gauss" returns Gauss-Chebyshev nodes/weights for the weight
-    function 1/sqrt(1-x^2). kind="clenshaw_curtis" matches CompEcon's
-    qnwcheb (Chebyshev nodes with Clenshaw-Curtis weights for unweighted
-    integrals).
-    """
-    kind = kind.lower()
-    if kind in ("gauss", "chebyshev"):
-        x, w = chebyshev.chebgauss(n)
-        nodes = 0.5 * (b - a) * x + 0.5 * (b + a)
-        weights = 0.5 * (b - a) * w
-        return nodes, weights
-    if kind in ("clenshaw_curtis", "compecon"):
-        k = np.linspace(0.5, n - 0.5, n)
-        nodes = 0.5 * (b + a) - 0.5 * (b - a) * np.cos(np.pi / n * k)
-
-        t1 = np.arange(1, n + 1) - 0.5
-        t2 = np.arange(0.0, n, 2)
-        t3 = np.concatenate(
-            [
-                np.array([1.0]),
-                -2.0 / (np.arange(1.0, n - 1, 2) * np.arange(3.0, n + 1, 2)),
-            ]
-        )
-        weights = ((b - a) / n) * np.cos(np.pi / n * np.outer(t1, t2)).dot(t3)
-        return nodes, weights
-    raise ValueError("kind must be 'gauss' or 'clenshaw_curtis'")
+def qnwcheb(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]:
+    """Gauss-Chebyshev nodes and weights on [a, b]."""
+    x, w = chebyshev.chebgauss(n)
+    nodes = 0.5 * (b - a) * x + 0.5 * (b + a)
+    weights = 0.5 * (b - a) * w
+    return nodes, weights
 
 
 def qnwnorm(n: int, mu: float = 0.0, sigma: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
@@ -95,12 +70,9 @@ def qnwtrap(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]:
 
 def qnwbeta(n: int, a: float = 1.0, b: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
     """Quadrature nodes and weights for Beta(a, b) on [0, 1]."""
-    # Map Beta(a,b) on [0,1] to Jacobi weights on [-1,1]
-    # Jacobi uses (1-x)^alpha (1+x)^beta, which corresponds to
-    # (1-t)^alpha t^beta after x = 2t - 1, so swap a and b.
-    x, w = special.roots_jacobi(n, b - 1.0, a - 1.0)
+    x, w = special.roots_jacobi(n, a - 1.0, b - 1.0)
     nodes = 0.5 * (x + 1.0)
-    weights = w * (2.0 ** (-(a + b - 1.0))) / special.beta(a, b)
+    weights = 0.5 * w
     return nodes, weights
 
 

@@ -829,6 +829,33 @@ error = np.max(np.abs(approx - np.exp(x_test)))
 print(f"Max error: {error:.2e}")  # Very small
 \end{lstlisting}
 
+\subsubsection{Chebyshev Approximation in Practice (Problem Set 1)}
+
+For approximating nonlinear functions (e.g., value functions or Runge's function), compare accuracy across polynomial degrees. Using \textbf{Chebyshev nodes} avoids the Runge phenomenon that occurs with equidistant nodes.
+
+\paragraph{Example: Runge's function.} Approximate $f(x) = 1/(1+x^2)$ on $[-10, 10]$ (a classic test where equidistant polynomial interpolation diverges near the boundaries). With Chebyshev approximation, error decreases as $n$ increases.
+
+\begin{lstlisting}
+from hetmacro.interpolation import cheb_nodes, cheb_coef, cheb_eval
+import numpy as np
+
+def runge(x):
+    return 1.0 / (1.0 + x**2)
+
+a, b = -10.0, 10.0
+x_fine = np.linspace(a, b, 500)
+f_true = runge(x_fine)
+
+# Compare polynomial degrees 5, 10, 15, 20
+for n in [5, 10, 15, 20]:
+    coef = cheb_coef(runge, n=n, a=a, b=b)
+    approx = cheb_eval(coef, x_fine, a=a, b=b)
+    err = np.max(np.abs(approx - f_true))
+    print(f"n={n}: max error = {err:.2e}")
+\end{lstlisting}
+
+\paragraph{Visualizing approximation error.} Plot \texttt{approx} and \texttt{f\_true} on \texttt{x\_fine} for each $n$ to see how the error concentrates near the boundaries when $n$ is small and decreases globally as $n$ increases. For theoretical error bounds (Rivlin's theorem), see the Macro Bible Appendix B --- Function Approximation.
+
 \subsection{Spline Functions}
 
 \begin{lstlisting}
@@ -851,6 +878,9 @@ Equilibrium in economic models often requires finding roots of excess demand fun
 \end{itemize}
 
 This module wraps SciPy's optimization routines with a consistent API and sensible defaults.
+
+\paragraph{Rigorous treatment.}
+A macro-level, rigorous treatment of calibration (method of simulated moments), root finding (bisection, Brent, Newton, Broyden), optimization (golden section, Nelder--Mead, quasi-Newton), and Euler equation methods, with worked examples and figures from Problem Set 1, is given in the \textbf{Macro Bible} (Lecture Notes in Macroeconomics), Appendix B --- Numerical Methods chapter (\texttt{Parts\_and\_chapters/Appendix/numerical\_methods/ch\_numerical\_methods.tex}).
 
 \subsection{Root-Finding Functions}
 
@@ -914,19 +944,40 @@ def secant(
 
 \textbf{Purpose:} Secant method---derivative-free approximation of Newton's method.
 
-\subsubsection{\texttt{broyden}}
+\subsubsection{\texttt{broyden} (unified Broyden solver)}
 \begin{lstlisting}
 def broyden(
-    f: Callable, 
-    x0: np.ndarray, 
-    args=(), 
-    tol: float = 1e-8
-) -> np.ndarray
+    f: Callable,
+    x0: np.ndarray,
+    method: str = "compecon",
+    *,
+    args=(),
+    tol=None,
+    max_iter=None,
+    a=None,
+    b=None,
+    return_info: bool = False,
+    **kwargs,
+)
 \end{lstlisting}
 
-\textbf{Purpose:} Broyden's method for systems of nonlinear equations $F(x) = 0$.
+\textbf{Purpose:} Single entry point for Broyden-style solvers. Solves $F(x) = 0$ for systems of nonlinear equations. The argument \texttt{method} selects the implementation.
 
-\textbf{When to use:} Multi-dimensional root-finding (e.g., joint market clearing in multiple markets).
+\textbf{Arguments:}
+\begin{arglist}
+    \item[\texttt{method}] One of \texttt{"scipy"}, \texttt{"compecon"}, or \texttt{"componentwise"}.
+    \item[\texttt{a, b}] Required when \texttt{method="componentwise"}: lower and upper bounds on $x$.
+    \item[\texttt{**kwargs}] Passed to the underlying solver (e.g., \texttt{max\_steps}, \texttt{show\_iters} for \texttt{"compecon"}).
+\end{arglist}
+
+\textbf{When to use which method:}
+\begin{itemize}
+    \item \oldtextbf{\texttt{method="compecon"}}: Full coupled system $F(x)=0$ (e.g., equilibrium residuals in all $n$ unknowns). CompEcon-style: inverse Jacobian, backstepping line search, optional restarts. Use when the system is nonlinear or ill-scaled; SciPy's Broyden can diverge in such cases.
+    \item \oldtextbf{\texttt{method="scipy"}}: Same full-system case when the problem is well-behaved. Thin wrapper around \texttt{scipy.optimize.root(..., method="broyden1")}.
+    \item \oldtextbf{\texttt{method="componentwise"}}: Vectorized, largely \emph{componentwise} equations with bounds $a \le x \le b$ (e.g., many independent 1D FOCs). Requires \texttt{a} and \texttt{b}. Use for the inner step of a fixed-point iteration (e.g., household FOCs for hours given wages).
+\end{itemize}
+
+\textbf{Backward compatibility:} \texttt{broyden\_compecon(...)} and \texttt{solve\_broyden(func, x, a, b, ...)} are thin wrappers that call \texttt{broyden} with the appropriate \texttt{method}.
 
 \subsection{Optimization Functions}
 
@@ -964,13 +1015,16 @@ def nelder_mead(
     f: Callable, 
     x0: np.ndarray, 
     args=(), 
-    tol: float = 1e-8
-) -> Tuple[np.ndarray, float]
+    tol: float = 1e-8,
+    callback=None,
+    options: dict | None = None,
+    return_info: bool = False
+)
 \end{lstlisting}
 
-\textbf{Purpose:} Nelder-Mead simplex algorithm for derivative-free multi-dimensional optimization.
+\textbf{Purpose:} Nelder-Mead simplex algorithm for derivative-free multi-dimensional optimization (analogous to MATLAB's \texttt{fminsearch}).
 
-\returns{Tuple \texttt{(x\_opt, f\_opt)} of optimal point and function value.}
+\returns{If \texttt{return\_info=False}: tuple \texttt{(x\_opt, f\_opt)}. If \texttt{return\_info=True}: \texttt{(x\_opt, f\_opt, hist)} where \texttt{hist} has keys \texttt{"x"} (list of parameter vectors) and \texttt{"f"} (list of objective values at each iteration), so you can plot the error/SSE trace. Optional \texttt{callback(xk)} is invoked each iteration; \texttt{options} are passed to \texttt{scipy.optimize.minimize} (e.g.\ \texttt{maxiter}, \texttt{disp}).}
 
 \textbf{Example:}
 \begin{lstlisting}
@@ -983,6 +1037,182 @@ def excess_demand(r, A_supply_func, K_demand_func):
 r_star = brentq(excess_demand, a=0.01, b=0.05, 
                 args=(A_supply, K_demand))
 \end{lstlisting}
+
+\subsection{Choosing the Right Method}
+
+The table below summarizes when to use each root-finding and optimization method. The choice depends on dimensionality, derivative availability, and problem structure.
+
+\subsubsection{Root-Finding Methods}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\oldtextbf{Method} & \oldtextbf{Dimension} & \oldtextbf{Requirements} & \oldtextbf{Best For} \\
+\midrule
+\texttt{bisect} & 1D & Bracketed root & Simple, guaranteed convergence \\
+\texttt{brentq} & 1D & Bracketed root & Default 1D choice; superlinear \\
+\texttt{newton} & 1D & Derivative $f'(x)$ & Fast convergence near root \\
+\texttt{secant} & 1D & None & Derivative-free Newton approx. \\
+\texttt{broyden} & $n$D & Initial guess & Systems of equations $F(x)=0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Optimization Methods}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\oldtextbf{Method} & \oldtextbf{Dimension} & \oldtextbf{Requirements} & \oldtextbf{Best For} \\
+\midrule
+\texttt{golden\_search} & 1D & Bounds $[a,b]$ & Unimodal, no derivatives \\
+\texttt{brent\_min} & 1D & Bounds $[a,b]$ & Default 1D minimization \\
+\texttt{nelder\_mead} & $n$D & Initial guess & Derivative-free, noisy objectives \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Decision Tree}
+
+\begin{enumerate}
+    \item \oldtextbf{Root-finding or optimization?}
+    \begin{itemize}
+        \item Root-finding: solving $f(x)=0$ (e.g., market clearing, Euler equations)
+        \item Optimization: minimizing $f(x)$ (e.g., calibration, moment matching)
+    \end{itemize}
+    \item \oldtextbf{One dimension or many?}
+    \begin{itemize}
+        \item 1D root: use \texttt{brentq} (bracketed) or \texttt{newton} (with derivative)
+        \item 1D minimum: use \texttt{brent\_min}
+        \item $n$D root: use \texttt{broyden} with \texttt{method="compecon"}
+        \item $n$D minimum: use \texttt{nelder\_mead}
+    \end{itemize}
+    \item \oldtextbf{Is the objective noisy or simulation-based?}
+    \begin{itemize}
+        \item Yes: use \texttt{nelder\_mead} (robust to noise, no gradients needed)
+        \item No: consider gradient-based methods if available
+    \end{itemize}
+\end{enumerate}
+
+\textbf{Example: Market Clearing vs Calibration}
+\begin{lstlisting}
+from hetmacro.optimize import brentq, nelder_mead
+
+# Root-finding: find r* such that A(r) - K(r) = 0
+r_star = brentq(lambda r: A(r) - K(r), a=0.01, b=0.05)
+
+# Optimization: find params minimizing SSE of moments
+def sse(params):
+    model_moments = simulate_model(params)
+    return np.sum((model_moments - target_moments)**2)
+
+params_opt, sse_opt = nelder_mead(sse, x0=np.array([0.9, 0.1, 0.05]))
+\end{lstlisting}
+
+\subsection{Calibration by Simulation (Method of Simulated Moments)}
+
+Many macroeconomic models require calibrating parameters to match empirical moments. When analytical moments are unavailable, we use \oldtextbf{simulation-based calibration}: simulate the model, compute moments from simulated data, and minimize the distance to target moments.
+
+\subsubsection{Workflow}
+
+\begin{enumerate}
+    \item \oldtextbf{Define target moments} from empirical data (e.g., standard deviation of log income, autocorrelations).
+    \item \oldtextbf{Write a simulation function} that takes parameters and returns model-implied moments.
+    \item \oldtextbf{Construct a loss function} measuring distance between model and target moments (typically sum of squared errors, SSE).
+    \item \oldtextbf{Optimize} using \texttt{nelder\_mead} (derivative-free, robust to simulation noise).
+\end{enumerate}
+
+\subsubsection{Example: Calibrating an Income Process}
+
+Consider calibrating an AR(1) process with measurement error:
+\[
+\log y_t = \rho \log y_{t-1} + u_t, \quad u_t \sim \mathcal{N}(0, \sigma_u^2)
+\]
+\[
+\log \tilde{y}_t = \log y_t + \varepsilon_t, \quad \varepsilon_t \sim \mathcal{N}(0, \sigma_\varepsilon^2)
+\]
+
+Target moments: $\text{sd}(\log \tilde{y})$, $\text{sd}(\Delta \log \tilde{y})$, autocorrelations at lags 1, 3, 5.
+
+\begin{lstlisting}
+import numpy as np
+from hetmacro.optimize import nelder_mead
+
+# Target moments from data
+target = {
+    'sd_logy': 0.92,
+    'sd_dlogy': 0.35,
+    'acf1': 0.89,
+    'acf3': 0.78,
+    'acf5': 0.71,
+}
+
+def simulate_income(rho, sigma_u, sigma_eps, T=10000, seed=42):
+    """Simulate observed log income with measurement error."""
+    np.random.seed(seed)
+    logy = np.zeros(T)
+    for t in range(1, T):
+        logy[t] = rho * logy[t-1] + sigma_u * np.random.randn()
+    logy_obs = logy + sigma_eps * np.random.randn(T)
+    return logy_obs
+
+def compute_moments(logy_obs):
+    """Compute moments from simulated data."""
+    dlogy = np.diff(logy_obs)
+    return {
+        'sd_logy': np.std(logy_obs),
+        'sd_dlogy': np.std(dlogy),
+        'acf1': np.corrcoef(logy_obs[1:], logy_obs[:-1])[0,1],
+        'acf3': np.corrcoef(logy_obs[3:], logy_obs[:-3])[0,1],
+        'acf5': np.corrcoef(logy_obs[5:], logy_obs[:-5])[0,1],
+    }
+
+def sse_loss(params):
+    """Sum of squared errors between model and target moments."""
+    rho, sigma_u, sigma_eps = params
+    if rho <= 0 or rho >= 1 or sigma_u <= 0 or sigma_eps <= 0:
+        return 1e10  # penalty for invalid params
+    logy_obs = simulate_income(rho, sigma_u, sigma_eps)
+    model = compute_moments(logy_obs)
+    sse = sum((model[k] - target[k])**2 for k in target)
+    return sse
+
+# Initial guess and optimization
+x0 = np.array([0.9, 0.2, 0.1])
+params_opt, sse_opt, hist = nelder_mead(sse_loss, x0, return_info=True)
+
+print(f"Optimal params: rho={params_opt[0]:.4f}, "
+      f"sigma_u={params_opt[1]:.4f}, sigma_eps={params_opt[2]:.4f}")
+print(f"Final SSE: {sse_opt:.6f}")
+\end{lstlisting}
+
+\subsubsection{Convergence Diagnostics}
+
+When using \texttt{nelder\_mead} with \texttt{return\_info=True}, you receive a history dictionary for diagnostics:
+
+\begin{lstlisting}
+import matplotlib.pyplot as plt
+
+# Plot SSE trace
+plt.figure(figsize=(8, 4))
+plt.plot(hist['f'])
+plt.xlabel('Iteration')
+plt.ylabel('SSE')
+plt.title('Nelder-Mead Convergence')
+plt.yscale('log')
+plt.show()
+\end{lstlisting}
+
+\textbf{Best practices:}
+\begin{itemize}
+    \item \oldtextbf{Multiple restarts}: Run from several initial guesses to avoid local minima.
+    \item \oldtextbf{Check final SSE}: A very small SSE suggests good fit; a large SSE may indicate model misspecification.
+    \item \oldtextbf{Examine moment fit}: Compare model and target moments individually to identify which are hardest to match.
+    \item \oldtextbf{Increase simulation length}: Longer simulations reduce Monte Carlo noise in moment estimates.
+\end{itemize}
+
+\paragraph{Appendix B (Macro Bible).}
+For the MSM objective, weight matrix choice, stochastic process (AR(1)+noise and jump-diffusion), and figures from the income calibration problem set, see the Macro Bible (Lecture Notes in Macroeconomics), Appendix B --- Numerical Methods, section ``Calibration and Estimation''.
 
 % ------------------------------------------------------------------
 \section{\texttt{markov.py} -- Markov Chain Tools}
@@ -1724,6 +1954,106 @@ plt.title('Consumption Policy Functions')
 plt.legend()
 plt.show()
 \end{lstlisting}
+
+% ==================================================================
+\chapter{Worked Examples from Problem Sets}
+% ==================================================================
+
+This chapter summarizes how the tools in \texttt{hetmacro} combine to solve the main numerical tasks in Problem Set 1: root finding for equilibrium, calibration by simulation, dynamic programming, and Euler equation methods. Each section gives the economic setup, the relevant \texttt{hetmacro} functions, and a compact workflow. For full theory, see the Macro Bible (Lecture Notes in Macroeconomics), Appendix B --- Numerical Methods.
+
+\section{Root Finding for Market Clearing (Problem 2)}
+
+\paragraph{Setup.} Static labor supply equilibrium with heterogeneous ability $e$: households choose hours $h(e)$; production $Y = L^\eta$; wage $W = \eta L^{\eta-1}$; government rebates tax revenue lump-sum. Equilibrium is a vector $\mathbf{h}$ such that each household's FOC holds and the labor market clears. This reduces to solving $F(\mathbf{h}) = \mathbf{0}$ where $F_i$ is the residual of the $i$-th household's first-order condition.
+
+\paragraph{Method.} Use \texttt{broyden} with \texttt{method='compecon'} for the full coupled system. Alternative: fixed-point iteration on the wage $W$ with an inner \texttt{broyden(..., method='componentwise', a=0, b=}\texttt{hmax)} for the vector of hours given $W$.
+
+\paragraph{Code pattern.}
+
+\begin{lstlisting}
+from hetmacro.optimize import broyden
+import numpy as np
+
+def residual(h, omega, e, eta, tau, sigma, gamma):
+    """FOC residuals: h_i^gamma - (1-tau)*W*e_i*c_i^{-sigma}."""
+    L = np.dot(omega, e * h)
+    W = eta * L**(eta - 1)
+    T = L**eta - (1 - tau) * W * L
+    c = T + (1 - tau) * W * e * h
+    return h**gamma - (1 - tau) * W * e * (c**(-sigma))
+
+h0 = np.full(n, 0.3)  # initial guess
+h_star, info = broyden(lambda h: residual(h, omega, e, eta, tau, sigma, gamma),
+                        h0, method='compecon', tol=1e-10)
+\end{lstlisting}
+
+\paragraph{Convergence.} Plot $\|F(\mathbf{h}^{(k)})\|$ vs.\ iteration to verify convergence. See codebook \texttt{optimize.py} and Macro Bible Appendix B for Broyden theory and labor market derivation.
+
+\section{Calibration by Simulation (Problem 3)}
+
+\paragraph{Setup.} Calibrate an AR(1) process with measurement error for log productivity: $y_t = x_t + \varepsilon_t$, $x_t = \rho x_{t-1} + u_t$. Target moments: sd($\log y$), sd($\Delta \log y$), autocorrelations at lags 1, 3, 5.
+
+\paragraph{Method.} Simulate a panel, compute model moments, minimize sum of squared errors (SSE) between model and target moments using \texttt{nelder\_mead}. Extension: jump-diffusion for fat tails (see Calibration Workflows in \texttt{macro\_agents.md}).
+
+\noindent \textbf{Code pattern.}
+\begin{lstlisting}
+from hetmacro.optimize import nelder_mead
+import numpy as np
+
+def sse_loss(params):
+    rho, sigma_u, sigma_eps = params
+    if not (0 < rho < 1 and sigma_u > 0 and sigma_eps > 0):
+        return 1e10
+    logy = simulate_ar1_noise(rho, sigma_u, sigma_eps, T=10000)
+    model = compute_moments(logy)  # sd, acf1, acf3, acf5
+    return np.sum((np.array([model['sd'], model['acf1'], ...]) - target)**2)
+
+params_opt, sse_opt, hist = nelder_mead(sse_loss, x0=np.array([0.9, 0.2, 0.1]),
+                                         return_info=True)
+# Plot hist['f'] for SSE convergence
+\end{lstlisting}
+
+See \texttt{optimize.py} ``Calibration by Simulation'' and Macro Bible ``Calibration and Estimation'' for MSM and jump-diffusion formulas.
+
+\section{Dynamic Programming (Problem 4)}
+
+\paragraph{Setup.} Two-period or multi-period consumption-savings with income risk. Solve for value function $V(a,e)$ and policy $a'(a,e)$ (and consumption $c(a,e)$) via Bellman iteration.
+
+\paragraph{Method.} Use \texttt{backward.policy\_iteration} with \texttt{method='vfi'} (value function iteration) or \texttt{method='egm'} (endogenous grid). Grids from \texttt{grids.py}; income process from \texttt{markov.rouwenhorst}; expectations via \texttt{quadrature} or the Markov chain.
+
+\noindent \textbf{Code pattern.}
+\begin{lstlisting}
+from hetmacro.grids import make_grid_1d
+from hetmacro.markov import rouwenhorst
+from hetmacro.backward import policy_iteration
+
+a_grid = make_grid_1d(0, 50, 200, spacing='power', power=2.0)
+e, Pi = rouwenhorst(n=7, rho=0.9, sigma=0.2)
+y = np.exp(e)
+Va, a_pol, c_pol = policy_iteration(Pi, a_grid, y, r=0.04, beta=0.96,
+                                     eis=0.5, method='vfi')
+\end{lstlisting}
+
+Policy functions are on the grid; use \texttt{interp\_linear} to evaluate at off-grid points. See \texttt{backward.py} and Macro Bible ``Value Function Iteration'' / ``Endogenous Grid Method''.
+
+\section{Euler Equation Methods (Problem 5)}
+
+\paragraph{Setup.} Portfolio choice or consumption-savings where the solution is characterized by Euler equations. At an interior optimum, $u'(c_t) = \beta (1+r) \mathbb{E}[u'(c_{t+1})]$ (and similarly for risky asset). Solve by time iteration: guess tomorrow's policy, solve today's from the Euler equation, repeat.
+
+\paragraph{Method.} For each state $(a,e)$ on the grid, solve the nonlinear equation (Euler residual = 0) for today's choice; use \texttt{broyden} or \texttt{brentq} for the inner 1D solve. Quadrature (\texttt{quadrature.qnwnorm} or \texttt{qnwnorm\_mv}) for expectations. Check accuracy with the \textbf{Euler residual}: left-hand side minus right-hand side of the Euler equation; should be small in the interior.
+
+\noindent \textbf{Code pattern.}
+\begin{lstlisting}
+from hetmacro.quadrature import qnwnorm_mv
+from hetmacro.optimize import broyden  # or brentq for 1D
+
+# For each (a, e): find x, x_s that satisfy Euler equations
+# res_safe = 1 - beta * E[M2 * (1+r)]
+# res_risky = 1 - beta * E[M2 * (1+r+eps)]
+nodes, weights = qnwnorm_mv(n=[7, 7], mu=mu, Sigma=Sigma)
+# ... define residual function, then broyden(residual, x0)
+\end{lstlisting}
+
+Plot the Euler residual over the state space to verify accuracy. See Macro Bible ``Euler Equation Methods'' and ``Euler Residual Diagnostics''.
 
 \end{onehalfspacing}
 
