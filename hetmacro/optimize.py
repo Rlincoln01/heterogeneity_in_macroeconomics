@@ -486,6 +486,82 @@ def golden_search(f: Callable, a: float, b: float, args=(), tol: float = 1e-8) -
     return res.x
 
 
+def golden_max_vec(
+    f: Callable,
+    a: np.ndarray | float,
+    b: np.ndarray | float,
+    args=(),
+    tol: float = 1e-8,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Vectorized golden-section maximization on per-element intervals.
+
+    Parameters
+    ----------
+    f : callable
+        Objective function. Must accept an array ``x`` and return an array
+        of the same shape (evaluated elementwise).
+    a, b : array_like or float
+        Lower and upper bounds for each element. Must be broadcastable to a
+        common shape.
+    args : tuple, optional
+        Extra arguments passed to ``f``.
+    tol : float, optional
+        Absolute tolerance on interval width.
+
+    Returns
+    -------
+    x : ndarray
+        Approximate maximizers on each element's interval.
+    fx : ndarray
+        Objective evaluated at ``x``.
+    """
+    alpha1 = 0.5 * (3.0 - np.sqrt(5.0))
+    alpha2 = 0.5 * (np.sqrt(5.0) - 1.0)
+
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    a, b = np.broadcast_arrays(a, b)
+    if np.any(b < a):
+        raise ValueError("All elements must satisfy b >= a.")
+
+    d = b - a
+    x1 = a + alpha1 * d
+    x2 = a + alpha2 * d
+
+    f1 = np.asarray(f(x1, *args), dtype=float)
+    f2 = np.asarray(f(x2, *args), dtype=float)
+
+    d = alpha1 * alpha2 * d
+    while np.any(d > tol):
+        x1old = x1.copy()
+        x2old = x2.copy()
+        f1old = f1.copy()
+        f2old = f2.copy()
+
+        d = d * alpha2
+        goR = f2 >= f1
+        goL = ~goR
+
+        xnew = (x1old - d) * goL + (x2old + d) * goR
+        fnew = np.asarray(f(xnew, *args), dtype=float)
+
+        x1[goR] = x2old[goR]
+        f1[goR] = f2old[goR]
+        x2[goR] = xnew[goR]
+        f2[goR] = fnew[goR]
+
+        x1[goL] = xnew[goL]
+        f1[goL] = fnew[goL]
+        x2[goL] = x1old[goL]
+        f2[goL] = f1old[goL]
+
+    goR = f2 >= f1
+    x = x2.copy()
+    x[~goR] = x1[~goR]
+    fx = np.maximum(f1, f2)
+    return x, fx
+
+
 def brent_min(f: Callable, a: float, b: float, args=(), tol: float = 1e-8) -> float:
     """Brent's method for scalar minimization."""
     res = optimize.minimize_scalar(f, bracket=(a, b), args=args, tol=tol, method="brent")

@@ -1009,6 +1009,21 @@ def brent_min(
 
 \textbf{Purpose:} Brent's method for 1D minimization. Generally faster than golden section.
 
+\subsubsection{\texttt{golden\_max\_vec}}
+\begin{lstlisting}
+def golden_max_vec(
+    f: Callable,
+    a: np.ndarray | float,
+    b: np.ndarray | float,
+    args=(),
+    tol: float = 1e-8,
+) -> tuple[np.ndarray, np.ndarray]
+\end{lstlisting}
+
+\textbf{Purpose:} Vectorized golden-section \emph{maximization} on per-element intervals. Accepts arrays \texttt{a}, \texttt{b} (bounds for each element) and a vectorized objective \texttt{f}; returns maximizers \texttt{x} and \texttt{f(x)}.
+
+\textbf{When to use:} Many independent 1D maximization problems (e.g.\ Bellman policy step over a grid) without Python loops.
+
 \subsubsection{\texttt{nelder\_mead}}
 \begin{lstlisting}
 def nelder_mead(
@@ -2102,7 +2117,7 @@ This checklist is the compact, module-level API reference for agents and users. 
     \item \texttt{grids.py}: \texttt{make\_asset\_grid}, \texttt{double\_exponential\_grid}, \texttt{log\_spaced\_grid}, \texttt{make\_grid\_1d}, \texttt{make\_grid\_nd}, \texttt{cartesian\_product}, \texttt{gridmake}, \texttt{tensor\_product}, \texttt{smolyak\_sparse\_grid}
     \item \texttt{quadrature.py}: \texttt{qnwlege}, \texttt{qnwcheb}, \texttt{qnwnorm}, \texttt{qnwlogn}, \texttt{qnwunif}, \texttt{qnwsimp}, \texttt{qnwtrap}, \texttt{qnwbeta}, \texttt{qnwgamma}, \texttt{qnwnorm\_mv}
     \item \texttt{interpolation.py}: \texttt{interp\_linear}, \texttt{interp\_bilinear}, \texttt{get\_lottery}, \texttt{spline\_fit}, \texttt{spline\_coef}, \texttt{spline\_eval}, \texttt{cheb\_nodes}, \texttt{cheb\_basis}, \texttt{cheb\_coef}, \texttt{cheb\_eval}
-    \item \texttt{optimize.py}: \texttt{bisect}, \texttt{brentq}, \texttt{newton}, \texttt{secant}, \texttt{broyden}, \texttt{broyden\_compecon}, \texttt{solve\_broyden}, \texttt{golden\_search}, \texttt{brent\_min}, \texttt{nelder\_mead}, \texttt{minimize\_lbfgsb}
+    \item \texttt{optimize.py}: \texttt{bisect}, \texttt{brentq}, \texttt{newton}, \texttt{secant}, \texttt{broyden}, \texttt{broyden\_compecon}, \texttt{solve\_broyden}, \texttt{golden\_search}, \texttt{golden\_max\_vec}, \texttt{brent\_min}, \texttt{nelder\_mead}, \texttt{minimize\_lbfgsb}
     \item \texttt{markov.py}: \texttt{rouwenhorst}, \texttt{tauchen}, \texttt{stationary\_distribution}, \texttt{simulate\_markov}
     \item \texttt{utils.py}: \texttt{crra\_utility}, \texttt{crra\_marginal}, \texttt{crra\_inverse\_marginal}, \texttt{ces\_aggregator}, \texttt{compute\_fixed\_point}, \texttt{numerical\_derivative}, \texttt{numerical\_jacobian}, \texttt{tic}, \texttt{toc}
 \end{itemize}
