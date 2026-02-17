@@ -1,0 +1,44 @@
+---
+description: hetmacro git workflow — always commit/push to dev work branch
+alwaysApply: true
+---
+
+# hetmacro — GitHub Workflow (AI-assisted)
+
+This rule defines **how the AI should behave** after it edits files in this repository.
+
+## Hard rules
+
+- **Never commit or push on branch `main`.**
+- Use branch **`dev/hetmacro-sync`** for all AI changes (create it if missing).
+- **Never force-push.** Never rewrite history.
+- Do not commit LaTeX build artifacts (e.g. `*.aux`, `*.log`, `*.fdb_latexmk`, `*.fls`, `*.synctex.gz`).
+
+## On task start (before editing any files)
+
+1. Check current branch:
+   - `git status -sb`
+   - `git branch --show-current`
+2. If currently on `main`, **switch to** `dev/hetmacro-sync` before making edits:
+   - If branch exists: `git switch dev/hetmacro-sync`
+   - If branch does not exist: `git switch -c dev/hetmacro-sync`
+
+## On task end (after editing)
+
+If and only if there were actual file changes:
+
+1. Review:
+   - `git status`
+   - `git diff`
+2. If changes touched public API or documentation:
+   - Update `docs/codebook/codebook.tex` to reflect `hetmacro/*.py` public functions
+   - Rebuild `docs/codebook/codebook.pdf` from `codebook.tex`
+3. Stage relevant files (prefer staging only files that changed):
+   - Include source changes (`hetmacro/*.py`)
+   - Include documentation source (`docs/codebook/codebook.tex`) and the updated `codebook.pdf` (if tracked)
+4. Commit with a concise message (why-focused), e.g.:
+   - `hetmacro: update interpolation spline API docs`
+   - `hetmacro: sync codebook with new forward iteration utilities`
+5. Push to GitHub:
+   - `git push -u origin HEAD`
+

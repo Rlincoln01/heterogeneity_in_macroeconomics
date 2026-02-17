@@ -1,6 +1,6 @@
 """Interpolation and lottery methods."""
 
-from typing import Tuple
+from typing import Any, Tuple
 
 import numpy as np
 
@@ -81,20 +81,115 @@ def get_lottery(a_policy: np.ndarray, a_grid: np.ndarray) -> Tuple[np.ndarray, n
     return a_i, a_pi
 
 
-def spline_coef(x: np.ndarray, y: np.ndarray, kind: str = "cubic"):
-    """Compute spline coefficients using SciPy."""
-    from scipy.interpolate import CubicSpline, make_interp_spline
-
+def _validate_spline_input(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Validate and normalize spline inputs."""
     x = np.asarray(x)
     y = np.asarray(y)
-    if kind == "cubic":
-        return CubicSpline(x, y)
-    return make_interp_spline(x, y, k=3)
+
+    if x.ndim != 1:
+        raise ValueError("`x` must be a one-dimensional array.")
+    if x.size < 2:
+        raise ValueError("`x` must contain at least two points.")
+    if not np.all(np.diff(x) > 0):
+        raise ValueError("`x` must be strictly increasing.")
+
+    return x, y
 
 
-def spline_eval(coef, x_new: np.ndarray) -> np.ndarray:
-    """Evaluate a spline object returned by spline_coef."""
-    return coef(x_new)
+def spline_fit(
+    x: np.ndarray,
+    y: np.ndarray,
+    method: str = "cubic",
+    *,
+    bc_type: Any = "not-a-knot",
+    extrapolate: bool = True,
+    axis: int = 0,
+):
+    """Fit a 1D interpolator with a consistent API.
+
+    Parameters
+    ----------
+    x : ndarray, shape (n,)
+        Grid points (must be strictly increasing).
+    y : ndarray
+        Values at grid points.
+    method : {"linear", "cubic", "pchip", "akima", "bspline"}
+        Interpolation method.
+    bc_type : Any, optional
+        Boundary condition argument used by cubic/bspline methods.
+    extrapolate : bool, optional
+        Whether to extrapolate outside the x-domain.
+    axis : int, optional
+        Axis of `y` corresponding to `x`.
+    """
+    from scipy.interpolate import (
+        Akima1DInterpolator,
+        CubicSpline,
+        PchipInterpolator,
+        make_interp_spline,
+    )
+
+    x, y = _validate_spline_input(x, y)
+    method_key = method.lower()
+
+    if method_key == "linear":
+        spline = make_interp_spline(x, y, k=1, axis=axis)
+        if hasattr(spline, "extrapolate"):
+            spline.extrapolate = extrapolate
+        return spline
+
+    if method_key == "cubic":
+        return CubicSpline(
+            x,
+            y,
+            axis=axis,
+            bc_type=bc_type,
+            extrapolate=extrapolate,
+        )
+
+    if method_key == "pchip":
+        return PchipInterpolator(x, y, axis=axis, extrapolate=extrapolate)
+
+    if method_key == "akima":
+        # Support both old/new SciPy signatures for Akima extrapolation.
+        try:
+            return Akima1DInterpolator(x, y, axis=axis, extrapolate=extrapolate)
+        except TypeError:  # pragma: no cover
+            akima = Akima1DInterpolator(x, y, axis=axis)
+            if hasattr(akima, "extrapolate"):
+                akima.extrapolate = extrapolate
+            return akima
+
+    if method_key in {"bspline", "b-spline"}:
+        spline = make_interp_spline(x, y, k=3, axis=axis, bc_type=bc_type)
+        if hasattr(spline, "extrapolate"):
+            spline.extrapolate = extrapolate
+        return spline
+
+    raise ValueError(
+        "Unknown spline method. Use one of: "
+        "'linear', 'cubic', 'pchip', 'akima', 'bspline'."
+    )
+
+
+def spline_coef(x: np.ndarray, y: np.ndarray, kind: str = "cubic", **kwargs):
+    """Backward-compatible alias to `spline_fit`.
+
+    Parameters
+    ----------
+    x, y : ndarray
+        Data to fit.
+    kind : str, optional
+        Alias for `method` in `spline_fit`.
+    **kwargs
+        Additional keyword arguments forwarded to `spline_fit`.
+    """
+    return spline_fit(x, y, method=kind, **kwargs)
+
+
+def spline_eval(model, x_new: np.ndarray) -> np.ndarray:
+    """Evaluate a spline/interpolator object returned by `spline_fit`."""
+    return model(x_new)
 
 
 def cheb_nodes(n: int, a: float, b: float) -> np.ndarray:

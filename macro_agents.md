@@ -78,6 +78,52 @@ a_grid = make_grid_1d(0, 20, 100,
                       concentration_weight=0.4)
 ```
 
+---
+
+## Interpolation & approximation (practical notes)
+
+### Chebyshev: **basis vs nodes**
+
+- **Chebyshev basis**: a function class (polynomials \(T_0,\dots,T_{n-1}\) on \([-1,1]\)).
+- **Chebyshev nodes**: a particular node set (roots / extrema mapped to \([a,b]\)) used to make polynomial interpolation **stable**.
+
+You *can* fit a Chebyshev polynomial on any distinct node set (e.g. equispaced), but:
+- **best practice** is to use **Chebyshev nodes** for Chebyshev interpolation, especially as \(n\) grows (conditioning/Runge issues).
+
+### Multi-dimensional Chebyshev
+
+- For tensor-product Chebyshev interpolation in \(d\) dimensions, use a **tensor product of 1D Chebyshev nodes** (one grid per dimension), then form the Cartesian product.
+
+```python
+from hetmacro.grids import make_grid_1d, gridmake
+
+# 1D Chebyshev nodes per dimension (mapped to bounds)
+a = make_grid_1d(0.0, 50.0, n, spacing="chebyshev")
+z = make_grid_1d(1.0,  5.0, n, spacing="chebyshev")
+e = make_grid_1d(1.0,  5.0, n, spacing="chebyshev")
+
+# Nodes as (n^3, 3) array
+nodes = gridmake(a, z, e)
+```
+
+### Grids: prefer `hetmacro.grids` helpers
+
+- Use `make_grid_1d(...)` instead of raw `np.linspace(...)` when you want consistent spacing options (`linear`, `power`, `double_exp`, `chebyshev`, etc.).
+- Use `gridmake(...)` (alias `cartesian_product`) instead of manual `meshgrid + column_stack` when building a Cartesian product of 1D grids.
+
+### Splines: use a unified wrapper
+
+- Use `hetmacro.interpolation.spline_fit/spline_eval` to standardize spline usage:
+  - `method="linear"`: **linear spline** (degree \(k=1\))
+  - `method="cubic"`: cubic spline (e.g. `bc_type="natural"`)
+  - `method="pchip"`: shape-preserving (often good for monotone policy/value objects)
+  - `method="akima"`: robust to local oscillations
+
+### Implementation note (library boundaries)
+
+- `hetmacro.interpolation.cheb_*` routines are implemented in **NumPy** (not a SciPy wrapper).
+- `spline_fit` is a **thin SciPy-backed wrapper** that provides a stable, consistent API.
+
 ### Switching between EGM and VFI
 ```python
 Va, a_pol, c_pol = policy_iteration(Pi, a_grid, y, r, beta, eis, method="egm")
@@ -141,6 +187,10 @@ approx = np.dot(weights, f(nodes))
 - For computing expectations over continuous shocks, use `quadrature.py`. Match the quadrature rule to the distribution: `qnwnorm` for normal, `qnwlege` for bounded intervals, etc.
 - Beware the **curse of dimensionality**: tensor-product quadrature grows as n^d. For high dimensions, consider sparse grids or Monte Carlo.
 - When adding new models, place them under `hetmacro/models/` and reuse tools rather than re-implementing.
+- **Documentation + GitHub policy**:
+  - Treat `docs/codebook/codebook.tex` as the canonical user-facing documentation for the public API.
+  - If you change any public function in `hetmacro/*.py`, update the relevant parts of `codebook.tex` (especially `\section{Public API Sync Checklist}`) and rebuild `codebook.pdf`.
+  - Ensure code + codebook updates are committed and pushed to GitHub using the dev-branch workflow in `.cursor/rules/20-git-autopush.mdc` (never push from `main`).
 
 ## Broyden methods: when to use which
 
