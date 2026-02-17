@@ -865,6 +865,29 @@ def spline_eval(coef, x_new: np.ndarray) -> np.ndarray
 
 \textbf{Purpose:} Cubic spline interpolation for smooth function approximation. Returns a SciPy spline object.
 
+\subsection{Basis Matrix Helpers (Spline Collocation)}
+
+\begin{lstlisting}
+def spline_basis_matrix(
+    breakpoints: np.ndarray,
+    x: np.ndarray,
+    degree: int = 3
+)
+def cubic_basis_matrix(breakpoints: np.ndarray, x: np.ndarray)
+def linear_basis_matrix(breakpoints: np.ndarray, x: np.ndarray)
+def tensor_basis_matrix(Phi_a, Phi_z)
+\end{lstlisting}
+
+\textbf{Purpose:}
+\begin{itemize}
+    \item \texttt{spline\_basis\_matrix}: sparse B-spline design matrix at evaluation points.
+    \item \texttt{cubic\_basis\_matrix}: cubic basis ($k=3$), used for value-function collocation.
+    \item \texttt{linear\_basis\_matrix}: linear tent basis ($k=1$), used for distribution transition matrices.
+    \item \texttt{tensor\_basis\_matrix}: row-wise Kronecker product for 2D tensor-product collocation.
+\end{itemize}
+
+For $n$ breakpoints and cubic splines with open knots, the number of basis functions is $n+2$.
+
 % ------------------------------------------------------------------
 \section{\texttt{optimize.py} -- Root-Finding and Optimization}
 % ------------------------------------------------------------------
@@ -1745,6 +1768,18 @@ def expectation_functions(X, Pi, a_i, a_pi, T) -> np.ndarray
 
 \textbf{Purpose:} Backward expectation operators for sequence-space Jacobian computation. Used internally by \texttt{ssj.py}.
 
+\subsection{Function: \texttt{stationary\_eigenvector}}
+
+\begin{lstlisting}
+def stationary_eigenvector(Q, tol: float = 1e-12) -> np.ndarray
+\end{lstlisting}
+
+\textbf{Purpose:} Recover stationary distribution as the left unit-eigenvector of a transition matrix:
+\[
+n'Q = n', \quad \sum_i n_i = 1.
+\]
+Uses sparse eigensolver for sparse matrices and dense eigendecomposition otherwise.
+
 % ------------------------------------------------------------------
 \section{\texttt{steady\_state.py} -- Equilibrium Solvers}
 % ------------------------------------------------------------------
@@ -2116,7 +2151,7 @@ This checklist is the compact, module-level API reference for agents and users. 
 \begin{itemize}
     \item \texttt{grids.py}: \texttt{make\_asset\_grid}, \texttt{double\_exponential\_grid}, \texttt{log\_spaced\_grid}, \texttt{make\_grid\_1d}, \texttt{make\_grid\_nd}, \texttt{cartesian\_product}, \texttt{gridmake}, \texttt{tensor\_product}, \texttt{smolyak\_sparse\_grid}
     \item \texttt{quadrature.py}: \texttt{qnwlege}, \texttt{qnwcheb}, \texttt{qnwnorm}, \texttt{qnwlogn}, \texttt{qnwunif}, \texttt{qnwsimp}, \texttt{qnwtrap}, \texttt{qnwbeta}, \texttt{qnwgamma}, \texttt{qnwnorm\_mv}
-    \item \texttt{interpolation.py}: \texttt{interp\_linear}, \texttt{interp\_bilinear}, \texttt{get\_lottery}, \texttt{spline\_fit}, \texttt{spline\_coef}, \texttt{spline\_eval}, \texttt{cheb\_nodes}, \texttt{cheb\_basis}, \texttt{cheb\_coef}, \texttt{cheb\_eval}
+    \item \texttt{interpolation.py}: \texttt{interp\_linear}, \texttt{interp\_bilinear}, \texttt{get\_lottery}, \texttt{spline\_fit}, \texttt{spline\_coef}, \texttt{spline\_eval}, \texttt{spline\_basis\_matrix}, \texttt{cubic\_basis\_matrix}, \texttt{linear\_basis\_matrix}, \texttt{tensor\_basis\_matrix}, \texttt{cheb\_nodes}, \texttt{cheb\_basis}, \texttt{cheb\_coef}, \texttt{cheb\_eval}
     \item \texttt{optimize.py}: \texttt{bisect}, \texttt{brentq}, \texttt{newton}, \texttt{secant}, \texttt{broyden}, \texttt{broyden\_compecon}, \texttt{solve\_broyden}, \texttt{golden\_search}, \texttt{golden\_max\_vec}, \texttt{brent\_min}, \texttt{nelder\_mead}, \texttt{minimize\_lbfgsb}
     \item \texttt{markov.py}: \texttt{rouwenhorst}, \texttt{tauchen}, \texttt{stationary\_distribution}, \texttt{simulate\_markov}
     \item \texttt{utils.py}: \texttt{crra\_utility}, \texttt{crra\_marginal}, \texttt{crra\_inverse\_marginal}, \texttt{ces\_aggregator}, \texttt{compute\_fixed\_point}, \texttt{numerical\_derivative}, \texttt{numerical\_jacobian}, \texttt{tic}, \texttt{toc}
@@ -2125,7 +2160,7 @@ This checklist is the compact, module-level API reference for agents and users. 
 \subsection{Heterogeneous-Agent Modules}
 \begin{itemize}
     \item \texttt{backward.py}: \texttt{backward\_egm}, \texttt{backward\_vfi}, \texttt{policy\_iteration}
-    \item \texttt{forward.py}: \texttt{forward\_iteration}, \texttt{stationary\_distribution}, \texttt{expectation\_iteration}, \texttt{expectation\_functions}, \texttt{stationary\_markov}
+    \item \texttt{forward.py}: \texttt{forward\_iteration}, \texttt{stationary\_distribution}, \texttt{expectation\_iteration}, \texttt{expectation\_functions}, \texttt{stationary\_markov}, \texttt{stationary\_eigenvector}
     \item \texttt{steady\_state.py}: \texttt{household\_steady\_state}, \texttt{market\_clearing}
     \item \texttt{distributions.py}: \texttt{forward\_policy\_step}, \texttt{stationary\_distribution\_ha}, \texttt{lottery\_indices}
     \item \texttt{dp\_tools.py}: \texttt{solve\_policy\_egm}, \texttt{solve\_policy\_vfi}, \texttt{solve\_steady\_policy}

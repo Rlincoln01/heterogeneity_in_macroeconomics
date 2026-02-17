@@ -65,6 +65,36 @@ def stationary_markov(Pi: np.ndarray, tol: float = 1e-14, max_iter: int = 10_000
     return pi
 
 
+def stationary_eigenvector(Q, tol: float = 1e-12) -> np.ndarray:
+    """Stationary distribution from left unit-eigenvector of transition matrix.
+
+    This computes the eigenvector associated with eigenvalue 1 of ``Q.T``,
+    rescales it so entries sum to one, and clips tiny negative roundoff noise.
+    """
+    from scipy import sparse
+    from scipy.sparse.linalg import eigs
+
+    if Q.shape[0] != Q.shape[1]:
+        raise ValueError("Q must be square.")
+
+    QT = Q.T
+    if sparse.issparse(QT):
+        vals, vecs = eigs(QT, k=1, sigma=1.0, tol=tol)
+        vec = np.real(vecs[:, 0])
+    else:
+        vals, vecs = np.linalg.eig(np.asarray(QT, dtype=float))
+        idx = int(np.argmin(np.abs(vals - 1.0)))
+        vec = np.real(vecs[:, idx])
+
+    if np.sum(vec) < 0:
+        vec = -vec
+    vec = np.maximum(vec, 0.0)
+    s = vec.sum()
+    if s <= 0:
+        raise RuntimeError("Failed to recover a valid stationary eigenvector.")
+    return vec / s
+
+
 if njit:
     @njit
     def forward_policy(D: np.ndarray, a_i: np.ndarray, a_pi: np.ndarray) -> np.ndarray:  # pragma: no cover

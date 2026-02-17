@@ -81,6 +81,108 @@ def get_lottery(a_policy: np.ndarray, a_grid: np.ndarray) -> Tuple[np.ndarray, n
     return a_i, a_pi
 
 
+def _validate_breakpoints(breakpoints: np.ndarray) -> np.ndarray:
+    """Validate and normalize spline breakpoints."""
+    bp = np.asarray(breakpoints, dtype=float)
+    if bp.ndim != 1:
+        raise ValueError("`breakpoints` must be one-dimensional.")
+    if bp.size < 2:
+        raise ValueError("`breakpoints` must contain at least two points.")
+    if not np.all(np.diff(bp) > 0):
+        raise ValueError("`breakpoints` must be strictly increasing.")
+    return bp
+
+
+def _bspline_knots(breakpoints: np.ndarray, degree: int) -> np.ndarray:
+    """Open knot vector for B-spline basis with interpolation breakpoints."""
+    if degree < 1:
+        raise ValueError("`degree` must be >= 1.")
+    bp = _validate_breakpoints(breakpoints)
+    k = degree
+    return np.concatenate([np.repeat(bp[0], k + 1), bp[1:-1], np.repeat(bp[-1], k + 1)])
+
+
+def spline_basis_matrix(breakpoints: np.ndarray, x: np.ndarray, degree: int = 3):
+    """Evaluate 1D B-spline basis matrix at points ``x``.
+
+    Parameters
+    ----------
+    breakpoints : ndarray, shape (n_breakpoints,)
+        Strictly increasing spline breakpoints.
+    x : ndarray
+        Evaluation points.
+    degree : int, optional
+        B-spline degree (1 for linear tent basis, 3 for cubic basis).
+
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        Basis matrix of shape ``(len(x), n_basis)`` where
+        ``n_basis = len(knots) - degree - 1``.
+    """
+    from scipy.interpolate import BSpline
+    from scipy.sparse import csr_matrix
+
+    bp = _validate_breakpoints(breakpoints)
+    x_eval = np.asarray(x, dtype=float).reshape(-1)
+    knots = _bspline_knots(bp, degree)
+    n_basis = knots.size - degree - 1
+
+    if hasattr(BSpline, "design_matrix"):
+        try:
+            mat = BSpline.design_matrix(x_eval, knots, degree, extrapolate=True)
+            return mat.tocsr() if hasattr(mat, "tocsr") else csr_matrix(mat)
+        except TypeError:  # pragma: no cover
+            # Compatibility with older SciPy signatures.
+            mat = BSpline.design_matrix(x_eval, knots, degree)
+            return mat.tocsr() if hasattr(mat, "tocsr") else csr_matrix(mat)
+
+    # Fallback for older SciPy versions without design_matrix.
+    dense = np.empty((x_eval.size, n_basis), dtype=float)
+    eye = np.eye(n_basis)
+    for j in range(n_basis):
+        dense[:, j] = BSpline(knots, eye[j], degree, extrapolate=True)(x_eval)
+    return csr_matrix(dense)
+
+
+def cubic_basis_matrix(breakpoints: np.ndarray, x: np.ndarray):
+    """Cubic B-spline basis matrix (degree 3)."""
+    return spline_basis_matrix(breakpoints, x, degree=3)
+
+
+def linear_basis_matrix(breakpoints: np.ndarray, x: np.ndarray):
+    """Linear (tent) B-spline basis matrix (degree 1)."""
+    return spline_basis_matrix(breakpoints, x, degree=1)
+
+
+def tensor_basis_matrix(Phi_a, Phi_z):
+    """Row-wise Kronecker product for tensor-product basis.
+
+    Parameters
+    ----------
+    Phi_a, Phi_z : array_like or sparse matrix
+        Basis matrices with identical number of rows.
+
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        Matrix with row ``i`` equal to ``kron(Phi_z[i,:], Phi_a[i,:])``.
+    """
+    from scipy import sparse
+
+    A = sparse.csr_matrix(Phi_a)
+    Z = sparse.csr_matrix(Phi_z)
+    if A.shape[0] != Z.shape[0]:
+        raise ValueError("Phi_a and Phi_z must have the same number of rows.")
+
+    rows = []
+    for i in range(A.shape[0]):
+        rows.append(sparse.kron(Z.getrow(i), A.getrow(i), format="csr"))
+    if not rows:
+        return sparse.csr_matrix((0, A.shape[1] * Z.shape[1]))
+    return sparse.vstack(rows, format="csr")
+
+
 def _validate_spline_input(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Validate and normalize spline inputs."""
     x = np.asarray(x)
