@@ -102,6 +102,36 @@ def _bspline_knots(breakpoints: np.ndarray, degree: int) -> np.ndarray:
     return np.concatenate([np.repeat(bp[0], k + 1), bp[1:-1], np.repeat(bp[-1], k + 1)])
 
 
+def greville_abscissae(breakpoints: np.ndarray, degree: int = 3) -> np.ndarray:
+    """Return Greville abscissae for a clamped B-spline basis.
+
+    These are the standard spline collocation nodes used by CompEcon
+    (`splinode` / `funnode`) and obtained by knot averaging:
+    ``x_j = (t_{j+1} + ... + t_{j+degree}) / degree``.
+
+    Parameters
+    ----------
+    breakpoints : ndarray, shape (n_breakpoints,)
+        Strictly increasing spline breakpoints.
+    degree : int, optional
+        B-spline degree (defaults to 3 for cubic splines).
+
+    Returns
+    -------
+    ndarray, shape (n_basis,)
+        Greville nodes where ``n_basis = len(knots) - degree - 1``.
+    """
+    if degree < 1:
+        raise ValueError("`degree` must be >= 1.")
+
+    knots = _bspline_knots(breakpoints, degree)
+    n_basis = knots.size - degree - 1
+    x = np.empty(n_basis, dtype=float)
+    for j in range(n_basis):
+        x[j] = np.mean(knots[j + 1 : j + degree + 1])
+    return x
+
+
 def spline_basis_matrix(breakpoints: np.ndarray, x: np.ndarray, degree: int = 3):
     """Evaluate 1D B-spline basis matrix at points ``x``.
 
