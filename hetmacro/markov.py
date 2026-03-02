@@ -88,6 +88,51 @@ def simulate_markov(P: np.ndarray, s0: int, T: int, random_state=None) -> np.nda
     return s
 
 
+def simulate_mc(
+    P: np.ndarray,
+    z_grid: np.ndarray,
+    T: int,
+    start_state: int = None,
+    burn_in: float = 0.0,
+    seed=None,
+) -> np.ndarray:
+    """Simulate Markov chain values from transition matrix and state grid."""
+    rng = np.random.default_rng(seed)
+    n = P.shape[0]
+    if start_state is None:
+        state = int(rng.integers(0, n))
+    else:
+        state = int(start_state)
+
+    path = np.empty(T)
+    for t in range(T):
+        path[t] = z_grid[state]
+        state = int(rng.choice(np.arange(n), p=P[state]))
+
+    b = int((burn_in / 100.0) * T) if burn_in > 0 else int(burn_in)
+    return path[b:]
+
+
+def markov_chain_ar1(rho: float, sig: float, n: int):
+    """Compact AR(1) Rouwenhorst discretization with output-normalized levels."""
+    p = q = 0.5 * (1.0 + rho)
+    Pi = np.array([[p, 1 - p], [1 - q, q]])
+    for k in range(2, n):
+        Pi_new = np.zeros((k + 1, k + 1))
+        Pi_new[:-1, :-1] += p * Pi
+        Pi_new[:-1, 1:] += (1 - p) * Pi
+        Pi_new[1:, :-1] += (1 - q) * Pi
+        Pi_new[1:, 1:] += q * Pi
+        Pi = Pi_new / np.sum(Pi_new, axis=1)[:, np.newaxis]
+
+    rho_abs = min(max(abs(rho), 1e-12), 1 - 1e-12)
+    steps = max(1, int(np.log(1e-15) / np.log(rho_abs)))
+    pi = np.linalg.matrix_power(Pi.T, steps)[:, 0]
+    z = np.exp(sig * np.sqrt(n - 1) * np.linspace(-1, 1, n))
+    z /= np.sum(pi * z)
+    return z, Pi, pi
+
+
 def _std_norm_cdf(x: float) -> float:
     return 0.5 * (1.0 + erf(x / sqrt(2.0)))
 

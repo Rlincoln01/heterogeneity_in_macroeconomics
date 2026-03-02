@@ -1,5 +1,6 @@
 """Interpolation and lottery methods."""
 
+from dataclasses import dataclass
 from typing import Any, Tuple
 
 import numpy as np
@@ -8,6 +9,45 @@ try:
     from numba import njit
 except Exception:  # pragma: no cover
     njit = None
+
+
+@dataclass
+class FunctionSpace:
+    """Lightweight spline function-space container.
+
+    Stores breakpoints and degree, precomputes Greville nodes, and caches
+    basis/solver objects used repeatedly by collocation methods.
+    """
+
+    breakpoints: np.ndarray
+    degree: int = 3
+    _nodes: np.ndarray = None
+    _phi: Any = None
+    _phi_solver: Any = None
+
+    @property
+    def nodes(self) -> np.ndarray:
+        if self._nodes is None:
+            self._nodes = greville_abscissae(self.breakpoints, degree=self.degree)
+        return self._nodes
+
+    def basis_matrix(self, x: np.ndarray):
+        """Return sparse basis matrix evaluated at x."""
+        return spline_basis_matrix(self.breakpoints, x, degree=self.degree)
+
+    def collocation_matrix(self):
+        """Return basis matrix evaluated at Greville nodes."""
+        if self._phi is None:
+            self._phi = self.basis_matrix(self.nodes)
+        return self._phi
+
+    def factorized_collocation_solver(self):
+        """Return sparse factorized solver for collocation matrix."""
+        from scipy.sparse.linalg import factorized
+
+        if self._phi_solver is None:
+            self._phi_solver = factorized(self.collocation_matrix().tocsc())
+        return self._phi_solver
 
 
 def interp_linear(x_grid: np.ndarray, y: np.ndarray, x_new: np.ndarray) -> np.ndarray:
@@ -205,11 +245,48 @@ def tensor_basis_matrix(Phi_a, Phi_z):
     if A.shape[0] != Z.shape[0]:
         raise ValueError("Phi_a and Phi_z must have the same number of rows.")
 
+    n_rows = A.shape[0]
+    n_cols = A.shape[1] * Z.shape[1]
+    if n_rows == 0:
+        return sparse.csr_matrix((0, n_cols))
+
+    # Fast path for bounded-sparsity bases. This avoids expensive per-row
+    # sparse.kron() calls in large loops.
+    nnz_a = np.diff(A.indptr)
+    nnz_z = np.diff(Z.indptr)
+    max_a = int(nnz_a.max(initial=0))
+    max_z = int(nnz_z.max(initial=0))
+    if max_a <= 4 and max_z <= 4:
+        max_nnz = n_rows * max(1, max_a * max_z)
+        row_idx = np.empty(max_nnz, dtype=np.int32)
+        col_idx = np.empty(max_nnz, dtype=np.int64)
+        data = np.empty(max_nnz, dtype=float)
+        k = 0
+
+        for i in range(n_rows):
+            a_start, a_end = A.indptr[i], A.indptr[i + 1]
+            z_start, z_end = Z.indptr[i], Z.indptr[i + 1]
+
+            a_indices = A.indices[a_start:a_end]
+            a_data = A.data[a_start:a_end]
+            z_indices = Z.indices[z_start:z_end]
+            z_data = Z.data[z_start:z_end]
+
+            for iz in range(z_indices.size):
+                z_col = int(z_indices[iz])
+                z_val = float(z_data[iz])
+                base = z_col * A.shape[1]
+                for ia in range(a_indices.size):
+                    row_idx[k] = i
+                    col_idx[k] = base + int(a_indices[ia])
+                    data[k] = z_val * float(a_data[ia])
+                    k += 1
+
+        return sparse.csr_matrix((data[:k], (row_idx[:k], col_idx[:k])), shape=(n_rows, n_cols))
+
     rows = []
-    for i in range(A.shape[0]):
+    for i in range(n_rows):
         rows.append(sparse.kron(Z.getrow(i), A.getrow(i), format="csr"))
-    if not rows:
-        return sparse.csr_matrix((0, A.shape[1] * Z.shape[1]))
     return sparse.vstack(rows, format="csr")
 
 

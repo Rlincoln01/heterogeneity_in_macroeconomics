@@ -32,6 +32,20 @@ def make_asset_grid(
     return make_grid_1d(amin, amax, n, spacing="power", power=curvature)
 
 
+def power_grid(amin: float, amax: float, n: int, phi: float = 25.0, nu: float = 5.0) -> np.ndarray:
+    """Nonlinear power grid with extra density near lower bound."""
+    x = np.linspace(0.0, 1.0, n)
+    xx = x + phi * x**nu
+    return amin + ((amax - amin) / (xx.max() - xx.min())) * xx
+
+
+def make_grid(vmin: float, vmax: float, n: int, smallest_step: float = 0.01) -> np.ndarray:
+    """Curvature-controlled 1D grid used in HA models."""
+    curv = np.log((vmax - vmin) / smallest_step) / np.log(n - 1)
+    curv = np.maximum(curv, 1.0)
+    return vmin + (vmax - vmin) * (np.linspace(0.0, 1.0, n) ** curv)
+
+
 def double_exponential_grid(amin: float, amax: float, n: int) -> np.ndarray:
     """Rognlie-style double exponential grid."""
     if amax < amin:

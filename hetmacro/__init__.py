@@ -9,6 +9,11 @@ __all__ = [
     "utils",
     "dp_tools",
     "distributions",
+    "forward",
+    "backward",
+    "income_process",
+    "household",
+    "solvers",
     "ssj",
 ]
 

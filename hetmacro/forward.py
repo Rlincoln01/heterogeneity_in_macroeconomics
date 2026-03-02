@@ -12,8 +12,8 @@ except Exception:  # pragma: no cover
 
 def forward_iteration(D: np.ndarray, Pi: np.ndarray, a_i: np.ndarray, a_pi: np.ndarray) -> np.ndarray:
     """Single forward step for distribution."""
-    Dend = forward_policy(D, a_i, a_pi)
-    return Pi.T @ Dend
+    Dend = update_policy_1a(a_i, a_pi, D)
+    return update_exogenous_1a(Pi, Dend)
 
 
 def stationary_distribution(
@@ -65,17 +65,52 @@ def stationary_markov(Pi: np.ndarray, tol: float = 1e-14, max_iter: int = 10_000
     return pi
 
 
-def stationary_eigenvector(Q, tol: float = 1e-12) -> np.ndarray:
+def stationary_eigenvector(
+    Q, tol: float = 1e-12, max_iter: int = 50_000
+) -> np.ndarray:
     """Stationary distribution from left unit-eigenvector of transition matrix.
 
-    This computes the eigenvector associated with eigenvalue 1 of ``Q.T``,
-    rescales it so entries sum to one, and clips tiny negative roundoff noise.
+    Tries eigenvector decomposition first, falls back to power iteration
+    if that fails or produces an invalid result.
     """
     from scipy import sparse
-    from scipy.sparse.linalg import eigs
 
     if Q.shape[0] != Q.shape[1]:
         raise ValueError("Q must be square.")
+
+    n = Q.shape[0]
+
+    # Try eigenvector method first
+    try:
+        vec = _eigenvector_solve(Q, tol)
+        if vec is not None:
+            return vec
+    except Exception:
+        pass
+
+    # Fallback: power iteration on Q^T
+    g = np.full(n, 1.0 / n)
+    if sparse.issparse(Q):
+        QT = Q.T.tocsr()
+    else:
+        QT = np.asarray(Q, dtype=float).T
+
+    for _ in range(max_iter):
+        g_new = QT @ g
+        g_new = np.maximum(g_new, 0.0)
+        s = g_new.sum()
+        if s > 0:
+            g_new /= s
+        if np.max(np.abs(g_new - g)) < tol:
+            return g_new
+        g = g_new
+    return g
+
+
+def _eigenvector_solve(Q, tol: float):
+    """Eigenvector solve; returns None if result is invalid."""
+    from scipy import sparse
+    from scipy.sparse.linalg import eigs
 
     QT = Q.T
     if sparse.issparse(QT):
@@ -91,8 +126,18 @@ def stationary_eigenvector(Q, tol: float = 1e-12) -> np.ndarray:
     vec = np.maximum(vec, 0.0)
     s = vec.sum()
     if s <= 0:
-        raise RuntimeError("Failed to recover a valid stationary eigenvector.")
+        return None
     return vec / s
+
+
+def update_policy_1a(a_ind: np.ndarray, a_ind_w: np.ndarray, g_prev: np.ndarray) -> np.ndarray:
+    """Lottery update from current asset bin to adjacent next-asset bins."""
+    return forward_policy(g_prev, a_ind, a_ind_w)
+
+
+def update_exogenous_1a(Pi: np.ndarray, g_prev: np.ndarray) -> np.ndarray:
+    """Exogenous income transition update."""
+    return Pi.T @ g_prev
 
 
 if njit:

@@ -127,3 +127,69 @@ def _value_from_marginal(Va: np.ndarray, a_grid: np.ndarray, eis: float) -> np.n
         V[:, i] = V[:, i - 1] + 0.5 * da * (c[:, i - 1] + c[:, i])
     return V
 
+
+def policy_evaluation_discrete(
+    a_choice_idx: np.ndarray, Pi: np.ndarray, utility: np.ndarray, beta: float
+) -> np.ndarray:
+    """Evaluate value function for a fixed discrete policy via linear system solve.
+
+    Parameters
+    ----------
+    a_choice_idx : ndarray, shape (n_y, n_a)
+        Chosen next-asset index at each state.
+    Pi : ndarray, shape (n_y, n_y)
+        Income transition matrix.
+    utility : ndarray, shape (n_y, n_a)
+        One-period utility under the fixed policy.
+    beta : float
+        Discount factor.
+    """
+    n_y, n_a = a_choice_idx.shape
+    n = n_y * n_a
+    T = np.zeros((n, n))
+    for e in range(n_y):
+        for i in range(n_a):
+            row = e * n_a + i
+            j = int(a_choice_idx[e, i])
+            for ep in range(n_y):
+                col = ep * n_a + j
+                T[row, col] += Pi[e, ep]
+
+    u = utility.reshape(-1)
+    V = np.linalg.solve(np.eye(n) - beta * T, u)
+    return V.reshape(n_y, n_a)
+
+
+def howard_policy_evaluation(
+    a_choice_idx: np.ndarray,
+    Pi: np.ndarray,
+    a_grid: np.ndarray,
+    y: np.ndarray,
+    r: float,
+    beta: float,
+    gamma: float,
+) -> np.ndarray:
+    """Howard policy evaluation for fixed discrete policy indices."""
+    n_y, n_a = a_choice_idx.shape
+    utility = np.empty((n_y, n_a))
+    for e in range(n_y):
+        for i, a in enumerate(a_grid):
+            j = int(a_choice_idx[e, i])
+            c = y[e] + (1.0 + r) * a - a_grid[j]
+            utility[e, i] = _crra_utility(np.maximum(c, 1e-14), gamma)
+    return policy_evaluation_discrete(a_choice_idx, Pi, utility, beta)
+
+
+def coefficient_vfi_step(theta: np.ndarray, bellman_operator) -> Tuple[np.ndarray, np.ndarray]:
+    """Generic coefficient-space Bellman step.
+
+    Parameters
+    ----------
+    theta : ndarray
+        Current coefficient vector/matrix.
+    bellman_operator : callable
+        Function returning ``(theta_new, policy)``.
+    """
+    theta_new, policy = bellman_operator(theta)
+    return theta_new, policy
+

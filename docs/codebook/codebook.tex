@@ -2083,7 +2083,7 @@ Va, a_pol, c_pol = policy_iteration(Pi, a_grid, y, r=0.04, beta=0.96,
                                      eis=0.5, method='vfi')
 \end{lstlisting}
 
-Policy functions are on the grid; use \texttt{interp\_linear} to evaluate at off-grid points. See \texttt{backward.py} and Macro Bible ``Value Function Iteration'' / ``Endogenous Grid Method''.
+Policy functions are on the grid; use \texttt{interp\_linear} to evaluate at off-grid points. For projection/collocation methods, keep \textbf{solve grid} and \textbf{output/evaluation grid} separate: solve on basis nodes (Greville/Chebyshev), then evaluate policies on a common fine grid before distribution iteration and method comparison.
 
 \section{Euler Equation Methods (Problem 5)}
 
@@ -2149,21 +2149,24 @@ This checklist is the compact, module-level API reference for agents and users. 
 
 \subsection{Foundational Modules}
 \begin{itemize}
-    \item \texttt{grids.py}: \texttt{make\_asset\_grid}, \texttt{double\_exponential\_grid}, \texttt{log\_spaced\_grid}, \texttt{make\_grid\_1d}, \texttt{make\_grid\_nd}, \texttt{cartesian\_product}, \texttt{gridmake}, \texttt{tensor\_product}, \texttt{smolyak\_sparse\_grid}
-    \item \texttt{quadrature.py}: \texttt{qnwlege}, \texttt{qnwcheb}, \texttt{qnwnorm}, \texttt{qnwlogn}, \texttt{qnwunif}, \texttt{qnwsimp}, \texttt{qnwtrap}, \texttt{qnwbeta}, \texttt{qnwgamma}, \texttt{qnwnorm\_mv}
-    \item \texttt{interpolation.py}: \texttt{interp\_linear}, \texttt{interp\_bilinear}, \texttt{get\_lottery}, \texttt{spline\_fit}, \texttt{spline\_coef}, \texttt{spline\_eval}, \texttt{spline\_basis\_matrix}, \texttt{cubic\_basis\_matrix}, \texttt{linear\_basis\_matrix}, \texttt{tensor\_basis\_matrix}, \texttt{cheb\_nodes}, \texttt{cheb\_basis}, \texttt{cheb\_coef}, \texttt{cheb\_eval}
+    \item \texttt{grids.py}: \texttt{make\_asset\_grid}, \texttt{power\_grid}, \texttt{make\_grid}, \texttt{double\_exponential\_grid}, \texttt{log\_spaced\_grid}, \texttt{make\_grid\_1d}, \texttt{make\_grid\_nd}, \texttt{cartesian\_product}, \texttt{gridmake}, \texttt{tensor\_product}, \texttt{smolyak\_sparse\_grid}
+    \item \texttt{quadrature.py}: \texttt{qnwlege}, \texttt{qnwcheb}, \texttt{qnwnorm} (\texttt{sigma} or \texttt{sig2}), \texttt{qnwlogn}, \texttt{qnwunif}, \texttt{qnwsimp}, \texttt{qnwtrap}, \texttt{qnwbeta}, \texttt{qnwgamma}, \texttt{qnwnorm\_mv}
+    \item \texttt{interpolation.py}: \texttt{FunctionSpace}, \texttt{interp\_linear}, \texttt{interp\_bilinear}, \texttt{get\_lottery}, \texttt{spline\_fit}, \texttt{spline\_coef}, \texttt{spline\_eval}, \texttt{spline\_basis\_matrix}, \texttt{cubic\_basis\_matrix}, \texttt{linear\_basis\_matrix}, \texttt{tensor\_basis\_matrix}, \texttt{cheb\_nodes}, \texttt{cheb\_basis}, \texttt{cheb\_coef}, \texttt{cheb\_eval}
     \item \texttt{optimize.py}: \texttt{bisect}, \texttt{brentq}, \texttt{newton}, \texttt{secant}, \texttt{broyden}, \texttt{broyden\_compecon}, \texttt{solve\_broyden}, \texttt{golden\_search}, \texttt{golden\_max\_vec}, \texttt{brent\_min}, \texttt{nelder\_mead}, \texttt{minimize\_lbfgsb}
-    \item \texttt{markov.py}: \texttt{rouwenhorst}, \texttt{tauchen}, \texttt{stationary\_distribution}, \texttt{simulate\_markov}
+    \item \texttt{markov.py}: \texttt{rouwenhorst}, \texttt{tauchen}, \texttt{stationary\_distribution}, \texttt{simulate\_markov}, \texttt{simulate\_mc}, \texttt{markov\_chain\_ar1}
     \item \texttt{utils.py}: \texttt{crra\_utility}, \texttt{crra\_marginal}, \texttt{crra\_inverse\_marginal}, \texttt{ces\_aggregator}, \texttt{compute\_fixed\_point}, \texttt{numerical\_derivative}, \texttt{numerical\_jacobian}, \texttt{tic}, \texttt{toc}
 \end{itemize}
 
 \subsection{Heterogeneous-Agent Modules}
 \begin{itemize}
-    \item \texttt{backward.py}: \texttt{backward\_egm}, \texttt{backward\_vfi}, \texttt{policy\_iteration}
-    \item \texttt{forward.py}: \texttt{forward\_iteration}, \texttt{stationary\_distribution}, \texttt{expectation\_iteration}, \texttt{expectation\_functions}, \texttt{stationary\_markov}, \texttt{stationary\_eigenvector}
+    \item \texttt{backward.py}: \texttt{backward\_egm}, \texttt{backward\_vfi}, \texttt{policy\_iteration}, \texttt{policy\_evaluation\_discrete}, \texttt{howard\_policy\_evaluation}, \texttt{coefficient\_vfi\_step}
+    \item \texttt{forward.py}: \texttt{forward\_iteration}, \texttt{stationary\_distribution}, \texttt{expectation\_iteration}, \texttt{expectation\_functions}, \texttt{stationary\_markov}, \texttt{stationary\_eigenvector}, \texttt{update\_policy\_1a}, \texttt{update\_exogenous\_1a}
     \item \texttt{steady\_state.py}: \texttt{household\_steady\_state}, \texttt{market\_clearing}
-    \item \texttt{distributions.py}: \texttt{forward\_policy\_step}, \texttt{stationary\_distribution\_ha}, \texttt{lottery\_indices}
-    \item \texttt{dp\_tools.py}: \texttt{solve\_policy\_egm}, \texttt{solve\_policy\_vfi}, \texttt{solve\_steady\_policy}
+    \item \texttt{distributions.py}: \texttt{forward\_policy\_step}, \texttt{stationary\_distribution\_ha}, \texttt{lottery\_indices}, \texttt{compute\_joint\_transition\_matrix}, \texttt{stationary\_dist}
+    \item \texttt{dp\_tools.py}: \texttt{solve\_policy\_egm}, \texttt{solve\_policy\_vfi}, \texttt{solve\_steady\_policy}, \texttt{interp\_grid}, \texttt{solve\_euler\_one\_asset}
+    \item \texttt{income\_process.py}: \texttt{DiscreteIncome}, \texttt{RouwenhorstIncome}, \texttt{TauchenIncome}, \texttt{ContinuousQuadratureIncome}
+    \item \texttt{household.py}: \texttt{SolvedPolicy}, \texttt{Household}
+    \item \texttt{solvers/*}: \texttt{GridVFI}, \texttt{HowardImprovement}, \texttt{PolicyFunctionIteration}, \texttt{EGM}, \texttt{CollocationVFI\_Spline}, \texttt{CollocationVFI\_Chebyshev}
     \item \texttt{ssj.py}: \texttt{jacobian}, \texttt{step1\_backward}, \texttt{J\_from\_F}
     \item \texttt{models/aiyagari.py}: \texttt{firm\_k\_demand}, \texttt{firm\_wage}, \texttt{solve\_steady\_state}
 \end{itemize}

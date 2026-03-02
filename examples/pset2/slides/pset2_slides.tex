@@ -1,0 +1,631 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+% Theme and color setup
+\usetheme{default}
+\usecolortheme{default}
+
+% Remove navigation symbols
+\setbeamertemplate{navigation symbols}{}
+
+% Custom colors (NYU-inspired: purple accent)
+\definecolor{nyupurple}{RGB}{87,35,100}
+\definecolor{darkblue}{RGB}{0,40,85}
+\definecolor{lightgray}{RGB}{245,245,245}
+\definecolor{darkgray}{RGB}{64,64,64}
+
+% Set main colors
+\setbeamercolor{frametitle}{fg=white,bg=darkblue}
+\setbeamercolor{title}{fg=darkblue}
+\setbeamercolor{author}{fg=black}
+\setbeamercolor{institute}{fg=black}
+\setbeamercolor{date}{fg=black}
+\setbeamercolor{structure}{fg=darkblue}
+\setbeamercolor{normal text}{fg=black}
+\setbeamercolor{itemize item}{fg=nyupurple}
+\setbeamercolor{itemize subitem}{fg=darkblue}
+\setbeamercolor{enumerate item}{fg=darkblue}
+
+% Frame title band
+\newlength{\titlebandht}
+\setlength{\titlebandht}{4ex}
+
+\setbeamertemplate{frametitle}{
+  \nointerlineskip
+  \begin{beamercolorbox}[wd=\paperwidth,ht=\titlebandht,dp=1.1ex,leftskip=1.2em,rightskip=1.2em]{frametitle}
+    \usebeamerfont{frametitle}\insertframetitle
+    \ifx\insertframesubtitle\@empty\relax\else\\[-0.2ex]
+      \usebeamerfont{framesubtitle}\insertframesubtitle
+    \fi
+  \end{beamercolorbox}
+  \vspace{0.6em}
+}
+
+% Font settings
+\usefonttheme{professionalfonts}
+\usefonttheme{serif}
+
+% Footline with page numbers
+\setbeamertemplate{footline}{
+    \hfill\insertframenumber\hspace{2em}\vspace{0.5em}
+}
+
+% Packages
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{bbm}
+
+% Custom commands for math
+\newcommand{\E}{\mathbb{E}}
+\renewcommand{\P}{\mathbb{P}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\Cov}{\text{Cov}}
+\newcommand{\Var}{\text{Var}}
+\newcommand{\Corr}{\text{Corr}}
+\newcommand{\xbf}{\mathbf{x}}
+\newcommand{\ybf}{\mathbf{y}}
+\newcommand{\zbf}{\mathbf{z}}
+\newcommand{\ubf}{\mathbf{u}}
+\newcommand{\vbf}{\mathbf{v}}
+\newcommand{\hbf}{\mathbf{h}}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\plim}{plim}
+
+% Block colors
+\setbeamercolor{block title}{bg=lightgray,fg=darkblue}
+\setbeamercolor{block body}{bg=lightgray!50}
+\setbeamercolor{block title alerted}{bg=nyupurple!15,fg=nyupurple}
+\setbeamercolor{block body alerted}{bg=nyupurple!5}
+
+% Figure path
+\graphicspath{{../tex/}}
+
+% Title information
+\title{Problem Set 2: Interpolation, Occupational Choice, and Search Frictions}
+\subtitle{Solutions + Comments}
+\author{Rafael Lincoln}
+\institute{New York University}
+\date{\today}
+
+\begin{document}
+
+% ============================================================================
+% SLIDE 1: TITLE
+% ============================================================================
+\begin{frame}[plain]
+    \titlepage
+\end{frame}
+
+% ============================================================================
+%  PROBLEM 1
+% ============================================================================
+
+% ============================================================================
+% SLIDE 2: 1D INTERPOLATION -- SETUP
+% ============================================================================
+\begin{frame}{Problem 1: 1D Interpolation --- Setup}
+    \textbf{Goal}: Approximate three benchmark functions on $s\in[0,1]$ and compare methods.
+    \vspace{0.3em}
+
+    \textbf{Functions} (chosen for difficulty):
+    \begin{itemize}\setlength\itemsep{0pt}
+        \item $f_1(s) = \exp(-s/0.01)$ \hfill \textit{steep near $s=0$}
+        \item $f_2(s) = \max(s, 0.5)$ \hfill \textit{kink at $s=0.5$}
+        \item $f_3(s) = \sin(25s^2) + \tfrac{1}{2}\log(s+0.01)$ \hfill \textit{oscillatory + log}
+    \end{itemize}
+    \vspace{0.3em}
+
+    \textbf{Methods}: 
+    \begin{itemize}\setlength\itemsep{0pt}
+        \item \textbf{Chebyshev} polynomial via least-squares fit
+        \item \textbf{Linear spline} ($k=1$, uniform grid)
+        \item \textbf{Cubic spline} ($k=3$, uniform grid)
+    \end{itemize}
+    
+    \textbf{Error metrics} (on 10\,001-point fine grid):
+    \[
+    \text{Max error} = \max_{s\in\mathcal{S}_{\text{fine}}} |\hat f(s) - f(s)|,
+    \qquad
+    \text{Mean error} = \frac{1}{|\mathcal{S}_{\text{fine}}|}\sum_s |\hat f(s) - f(s)|
+    \]
+\end{frame}
+
+% ============================================================================
+% SLIDE 3: 1D INTERPOLATION -- RESULTS
+% ============================================================================
+\begin{frame}{Problem 1: 1D Interpolation --- Results}
+    \vspace{-0.6em}
+    \begin{columns}[T]
+        \begin{column}{0.50\textwidth}
+            \begin{center}
+                \includegraphics[height=0.66\textheight]{fig_problem1_1d_interpolation.pdf}
+            \end{center}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \footnotesize
+            \textbf{Error summary ($n=51$)}\\[-0.2em]
+            \textit{max / mean}\\[0.4em]
+            \begin{itemize}\setlength\itemsep{0.35em}
+                \item \textbf{$f_1$ (exp)}\\
+                Cheb: \texttt{6.5e-12 / 1.6e-12}\\
+                Linear: \texttt{2.1e-01 / 3.1e-03}\\
+                Cubic: \texttt{1.4e-01 / 2.4e-03}
+                \item \textbf{$f_2$ (kink)}\\
+                Cheb: \texttt{2.9e-03 / 3.7e-04}\\
+                Linear: \texttt{1.1e-16 / 1.5e-17}\\
+                Cubic: \texttt{1.7e-03 / 5.8e-05}
+                \item \textbf{$f_3$ (sin+log)}\\
+                Cheb: \texttt{6.8e-06 / 2.3e-07}\\
+                Linear: \texttt{1.2e-01 / 1.9e-02}\\
+                Cubic: \texttt{5.0e-02 / 1.1e-03}
+            \end{itemize}
+        \end{column}
+    \end{columns}
+    \vspace{0.1em}
+    \footnotesize
+    \textbf{Takeaway}: Chebyshev excels on smooth targets; cubic spline handles kinks better. Linear spline converges slowly but never overshoots.
+\end{frame}
+
+% ============================================================================
+% SLIDE 4: OCCUPATIONAL CHOICE -- ECONOMIC SETTING
+% ============================================================================
+\begin{frame}{Problem 1.2: Occupational Choice --- Setting}
+    \small
+    \textbf{Agents}: Infinitely-lived households with assets $a\ge 0$, entrepreneurial ability $z$, labor ability $e$.
+
+    \textbf{Timing}: Observe $(a_t,e_t,z_t)$ $\to$ choose occupation $\to$ consume $c_t$, save $a_{t+1}\ge 0$.
+    \vspace{0.3em}
+
+    \begin{columns}[T]
+        \begin{column}{0.45\textwidth}
+            \textbf{Worker}:
+            \begin{itemize}\setlength\itemsep{0pt}
+                \item Income $y^W = We$
+                \item No capital needed
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.50\textwidth}
+            \textbf{Entrepreneur}:
+            \begin{itemize}\setlength\itemsep{0pt}
+                \item Technology $z(k^\alpha \ell^{1-\alpha})^\eta$
+                \item Collateral constraint: $k \le \lambda a$
+                \item Hires labor at $W$, rents capital at $R$
+            \end{itemize}
+        \end{column}
+    \end{columns}
+    \vspace{0.3em}
+    \begin{alertblock}{Key friction}
+        \small The collateral constraint $k\le\lambda a$ prevents small-wealth, high-ability agents from becoming entrepreneurs even when it would be efficient.
+    \end{alertblock}
+\end{frame}
+
+% ============================================================================
+% SLIDE 5: OCCUPATIONAL CHOICE -- KEY EQUATIONS
+% ============================================================================
+\begin{frame}{Problem 1.2: Key Equations}
+    \textbf{Entrepreneur profit} (after substituting optimal labor):
+    \[
+    \pi(a,z) = \max_{k \le \lambda a}\; \tilde\pi(k,z),
+    \qquad
+    k(a,z) = \min\{k^u(z),\; \lambda a\}
+    \]
+    where $k^u(z)$ is the unconstrained optimum.
+    \vspace{0.4em}
+
+    \textbf{Occupation value}:
+    \[
+    V(a,e,z) = \max\bigl\{\pi(a,z),\; We\bigr\}
+    \]
+    \vspace{0.2em}
+
+    \textbf{Bellman equation} (dynamic extension):
+    \[
+    \boxed{
+    J(a,e,z) = \max_{a'\ge 0}\;\bigl\{u\bigl((1+r)a + V(a,e,z) - a'\bigr) + \beta\,\E\bigl[J(a',e',z')\mid e,z\bigr]\bigr\}
+    }
+    \]
+    \vspace{0.2em}
+
+    \textbf{Problem 1.2 specifically}: approximate $V(a,e,z)$ on a 3D grid using Chebyshev, linear spline, and cubic spline --- same comparison as 1D but in three dimensions.
+\end{frame}
+
+% ============================================================================
+% SLIDE 6: 3D APPROXIMATION OF V
+% ============================================================================
+\begin{frame}{Problem 1.2: 3D Approximation of $V(a,e,z)$}
+    \vspace{-0.6em}
+    \begin{columns}[T]
+        \begin{column}{0.52\textwidth}
+            \footnotesize
+            \textbf{Setup}: tensor grid over $(a,z,e)$ with $n$ points per dimension; errors on a $(3n)^3$ fine grid.
+            \vspace{0.3em}
+
+            \textbf{Numerical story}:
+            \begin{itemize}\setlength\itemsep{0.25em}
+                \item \textbf{Chebyshev basis + imposed regular grid} $\Rightarrow$ ill-conditioned \textbf{Vandermonde} design matrix; coefficients become unstable as $n$ rises.
+                \item \textbf{Splines} are local and designed for regular grids $\Rightarrow$ stable, smooth error decay.
+                \item Using \textbf{Chebyshev nodes} (instead of imposed nodes) would greatly improve conditioning.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.46\textwidth}
+            \scriptsize
+            \textbf{Key numbers (mean abs.\ error)}\\[-0.2em]
+            \textit{($n$ points per dimension)}\\[0.3em]
+            \begin{center}
+            \renewcommand{\arraystretch}{1.15}
+            \begin{tabular}{lccc}
+                \toprule
+                & $n=11$ & $n=15$ & $n=21$ \\
+                \midrule
+                Cheb & 0.135 & 0.201 & 53.1 \\
+                Linear & 0.210 & 0.112 & 0.057 \\
+                Cubic & 0.083 & 0.045 & 0.022 \\
+                \bottomrule
+            \end{tabular}
+            \end{center}
+            \vspace{0.2em}
+            \scriptsize
+            \textbf{Cheb max abs.\ error explodes}: $8.5 \to 166 \to 6.4\times 10^{5}$.
+        \end{column}
+    \end{columns}
+    \vspace{0.1em}
+    \footnotesize
+    \textbf{Takeaway}: On the imposed grid, splines convey the approximation signal cleanly; Chebyshev is dominated by conditioning unless we use Chebyshev nodes.
+\end{frame}
+
+% ============================================================================
+% SLIDE 7: DYNAMIC EXTENSION -- VFI + STATIONARY DISTRIBUTION
+% ============================================================================
+\begin{frame}{Dynamic Extension: VFI + Stationary Distribution}
+    \textbf{Calibration highlights}:
+    \begin{itemize}
+        \item $\beta = 0.95$, $\gamma = 2$ (CRRA), $r = 0.02$
+        \item Abilities: $\log e$, $\log z$ each AR(1), Rouwenhorst ($n_e=n_z=5$; $\rho=0.9$, $\sigma_e=0.2$, $\sigma_z=0.3$)
+        \item Joint transition: $\Pi = \Pi_e \otimes \Pi_z$
+    \end{itemize}
+    \vspace{0.3em}
+
+    \textbf{Value Function Iteration}:
+    \begin{enumerate}
+        \item For each state $(a,e,z)$: compute cash-on-hand $(1+r)a + V(a,e,z)$
+        \item Maximize over $a'\ge 0$ on a dense choice grid; evaluate continuation values by \textbf{interpolating on the $a$-grid} (1D interpolation in $a'$ of $\beta\,\E[J(a',e',z')]$)
+    \end{enumerate}
+    \vspace{0.3em}
+
+    \textbf{Stationary distribution} via forward iteration:
+    \begin{enumerate}
+        \item \textbf{Policy step}: move mass according to $a'(a,e,z)$, using lottery weights for off-grid $a'$
+        \item \textbf{Exogenous step}: apply $(\Pi_e\otimes\Pi_z)^\top$
+        \item Iterate until $\|\mu^{(k+1)} - \mu^{(k)}\| < \varepsilon$
+    \end{enumerate}
+\end{frame}
+
+% ============================================================================
+% SLIDE 8: EXTENSION RESULTS -- POLICIES
+% ============================================================================
+\begin{frame}{Extension Results: Policy Functions}
+    \vspace{-0.3em}
+    \begin{center}
+        \includegraphics[height=0.72\textheight]{fig_problem1_extension_policies.pdf}
+    \end{center}
+    \vspace{-0.8em}
+    \small
+    \textbf{Interpretation}: Savings $a'-a$ increasing in $a$; entrepreneurs save more. Consumption smooth and concave.
+\end{frame}
+
+% ============================================================================
+% SLIDE 9: EXTENSION RESULTS -- OCCUPATIONAL CHOICE MAP
+% ============================================================================
+\begin{frame}{Extension Results: Occupational Choice}
+    \begin{center}
+        \includegraphics[width=0.88\textwidth]{fig_problem1_extension_occ_map.pdf}
+    \end{center}
+    \vspace{-0.5em}
+    \small
+    \textbf{Interpretation}: Wealthier and higher-$z$ agents become entrepreneurs (collateral constraint relaxes). The cutoff $a^*(z;e)$ shifts left as $z$ rises --- high-ability agents need less wealth to find entrepreneurship profitable.
+\end{frame}
+
+% ============================================================================
+% SLIDE 10: EXTENSION RESULTS -- WEALTH DISTRIBUTION
+% ============================================================================
+\begin{frame}{Extension Results: Wealth Concentration}
+    \begin{center}
+        \includegraphics[width=0.88\textwidth]{fig_problem1_extension_lorenz_ccdf.pdf}
+    \end{center}
+    \vspace{-0.5em}
+    \small
+    \textbf{Interpretation}: The Lorenz curve shows significant inequality; the CCDF exhibits a Pareto-like tail. Entrepreneurial returns --- amplified by the collateral constraint --- drive right-tail wealth concentration: those who can invest earn disproportionately high returns, accumulate faster, and stay rich.
+\end{frame}
+
+% ============================================================================
+%  PROBLEM 2
+% ============================================================================
+
+% ============================================================================
+% SLIDE 11: DMP -- ENVIRONMENT
+% ============================================================================
+\begin{frame}{Problem 2: DMP Model --- Environment}
+    \footnotesize
+    \vspace{-0.5em}
+    \begin{columns}[T]
+        \begin{column}{0.56\textwidth}
+            \textbf{Agents / states}
+            \begin{itemize}\setlength\itemsep{0.15em}
+                \item \textbf{Workers}: employed or unemployed.
+                \item \textbf{Firms}: post vacancies at flow cost $\kappa$; if matched, produce.
+                \item \textbf{State}: aggregate productivity $z_t$.
+            \end{itemize}
+            \vspace{0.15em}
+
+            \textbf{Within-period timing}
+            \begin{itemize}\setlength\itemsep{0.15em}
+                \item Produce $\to$ separation (rate $\sigma$) $\to$ matching $\to$ Nash bargaining.
+                \item Productivity (AR(1) in logs): $\log z_{t+1}=\rho_z\log z_t+\sigma_z\varepsilon_{t+1}$.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.42\textwidth}
+            \textbf{Matching technology}
+            \begin{itemize}\setlength\itemsep{0.15em}
+                \item Matching: $m_t = B\,u_t^\alpha v_t^{1-\alpha}$.
+                \item Tightness: $\theta_t \equiv v_t/u_t$.
+                \item Job finding: $\lambda_{w,t}=m_t/u_t=B\theta_t^{1-\alpha}$.
+                \item Vacancy filling: $\lambda_{f,t}=m_t/v_t=B\theta_t^{-\alpha}$.
+            \end{itemize}
+            \vspace{0.15em}
+
+            \textbf{Parameter map}
+            \begin{itemize}\setlength\itemsep{0.15em}
+                \item $B,\alpha$: matching efficiency / elasticity.
+                \item $\sigma,\kappa$: separation / vacancy cost.
+                \item $b,\beta,\gamma$: outside value / discount / bargaining.
+                \item $\rho_z,\sigma_z$: persistence / volatility.
+            \end{itemize}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% ============================================================================
+% SLIDE 12: DMP -- VALUE FUNCTIONS AND SURPLUS
+% ============================================================================
+\begin{frame}{Problem 2: Value Functions and Surplus}
+    \footnotesize
+    \vspace{-0.5em}
+    \begin{columns}[T]
+        \begin{column}{0.53\textwidth}
+            \textbf{Objects (what they mean)}
+            \begin{itemize}\setlength\itemsep{0.15em}
+                \item $W(z)$ / $U(z)$: worker value employed / unemployed (flow $b$).
+                \item $J(z)$: firm value from a filled job (match).
+                \item $S(z)\equiv W(z)-U(z)+J(z)$: total match surplus.
+            \end{itemize}
+            \vspace{0.15em}
+
+            \textbf{Bellman equations (compact)}
+            \[
+            \begin{aligned}
+            W(z)&= w(z)+\beta\,\E[(1-\sigma)W(z')+\sigma U(z')],\\
+            U(z)&= b+\beta\,\E[\lambda_w(z)W(z')+(1-\lambda_w(z))U(z')],\\
+            J(z)&= z-w(z)+\beta(1-\sigma)\E[J(z')].
+            \end{aligned}
+            \]
+        \end{column}
+        \begin{column}{0.44\textwidth}
+            \textbf{Mapping into equilibrium conditions}
+            \begin{itemize}\setlength\itemsep{0.15em}
+                \item \textbf{Nash bargaining} (share $\gamma$):\ $W-U=\gamma S$, $J=(1-\gamma)S$.
+                \item \textbf{Surplus recursion} (substitute out $w$):
+            \end{itemize}
+            \[
+            \boxed{\begin{aligned}
+            S(z) &= z-b \\
+            &\quad + \beta\bigl(1-\sigma-\gamma\lambda_w(z)\bigr)\E[S(z')\mid z]
+            \end{aligned}}
+            \]
+            \vspace{0.1em}
+            \textbf{Free entry} (vacancy value $=0$) $\Rightarrow$
+            \[
+            \boxed{\lambda_w(z)=\chi\cdot\bigl(\beta\,\E[S(z')\mid z]\bigr)^{\frac{1-\alpha}{\alpha}}}
+            \]
+            {\scriptsize where $\chi \equiv B^{1/\alpha}\Bigl(\frac{1-\gamma}{\kappa}\Bigr)^{\frac{1-\alpha}{\alpha}}$.}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% ============================================================================
+% SLIDE 13: DMP -- EQUILIBRIUM AND CALIBRATION
+% ============================================================================
+\begin{frame}{Problem 2: Equilibrium and Calibration}
+    \textbf{Recursive equilibrium}: two equations in $(S, \lambda_w)$ indexed by $z$-states.
+    \vspace{0.3em}
+
+    \begin{center}
+    \small
+    \begin{tabular}{llcl}
+        \toprule
+        \textbf{Parameter} & \textbf{Symbol} & \textbf{Value} & \textbf{Description} \\
+        \midrule
+        Discount factor & $\beta$ & $0.96^{1/12}$ & Monthly \\
+        Separation & $\sigma$ & $0.04$ & Monthly rate \\
+        Bargaining & $\gamma$ & $0.50$ & Worker share \\
+        Outside option & $b$ & $0.70$ & Flow value \\
+        Persistence & $\rho_z$ & $0.90^{1/12}$ & AR(1) monthly \\
+        Volatility & $\sigma_z$ & $0.005$ & Innovation std.\ dev. \\
+        Matching elast. & $\alpha$ & $0.50$ & CRS exponent \\
+        Matching eff. & $B$ & $0.40$ & Scale \\
+        Vacancy cost & $\kappa$ & implied & Targets $\bar\theta=1$ \\
+        \bottomrule
+    \end{tabular}
+    \end{center}
+    \vspace{0.3em}
+    \small
+    Discretize $z$ with Rouwenhorst ($N=51$ states). Steady state: $\bar\lambda_w = B = 0.4$, $\bar\theta = 1$.
+\end{frame}
+
+% ============================================================================
+% SLIDE 14: DMP -- SOLUTION METHODS
+% ============================================================================
+\begin{frame}{Problem 2: Solution Methods}
+    \textbf{Three approaches} to solve the discretized system:
+    \vspace{0.3em}
+
+    \begin{enumerate}
+        \item \textbf{Perturbation (Dynare, order=1)}: log-linearize around steady state
+        \[
+        \tilde s_t = \frac{1}{\bar S}\hat z_t + \beta\Bigl(1-\sigma-\frac{\gamma}{\alpha}\bar\lambda_w\Bigr)\E_t[\tilde s_{t+1}],
+        \quad
+        \tilde\lambda_t = \frac{1-\alpha}{\alpha}\E_t[\tilde s_{t+1}]
+        \]
+        \item \textbf{Iterative fixed-point}: given $\lambda_w^{(k)}$, solve linear system for $S^{(k)}$; update $\lambda_w^{(k+1)}$
+        \item \textbf{Newton / Broyden}: stack $x = (S, \lambda_w) \in \R^{2N}$; solve $F(x)=0$ with exact Jacobian or quasi-Newton
+    \end{enumerate}
+    \vspace{0.4em}
+
+    \begin{center}
+    \small
+    \begin{tabular}{lcc}
+        \toprule
+        Method & Iterations & Agree? \\
+        \midrule
+        Iterative & $\sim$125 & \checkmark \\
+        Broyden & $\sim$15 & \checkmark \\
+        Newton (exact) & $\sim$6 & \checkmark \\
+        \bottomrule
+    \end{tabular}
+    \end{center}
+\end{frame}
+
+% ============================================================================
+% SLIDE 15: DMP -- POLICY FUNCTIONS
+% ============================================================================
+\begin{frame}{Problem 2: Policy Functions $S(z)$ and $\lambda_w(z)$}
+    \begin{center}
+        \includegraphics[width=0.92\textwidth]{fig_problem2_profiles.pdf}
+    \end{center}
+    \vspace{-0.5em}
+    \small
+    All three nonlinear methods produce \textbf{identical} policy functions. Both $S(z)$ and $\lambda_w(z)$ are increasing in $z$: higher productivity makes matches more valuable and induces more vacancy posting.
+\end{frame}
+
+% ============================================================================
+% SLIDE 16: DMP -- DYNARE VS NONLINEAR
+% ============================================================================
+\begin{frame}{Problem 2: Dynare Linear vs.\ Nonlinear Solution}
+    \begin{center}
+        \includegraphics[width=0.92\textwidth]{fig_problem2_profiles_dynare_linear_compare.pdf}
+    \end{center}
+    \vspace{-0.5em}
+    \small
+    The first-order perturbation (Dynare) is \textbf{accurate near the steady state} ($z=1$) but \textbf{underestimates the response} at tail values of $z$. The nonlinear solution captures the curvature that linearization misses.
+\end{frame}
+
+% ============================================================================
+% SLIDE 17: DMP -- SIMULATED FLUCTUATIONS
+% ============================================================================
+\begin{frame}{Problem 2: Simulated Labor-Market Fluctuations}
+    \vspace{-0.3em}
+    \begin{center}
+        \includegraphics[height=0.70\textheight]{fig_problem2_simulated_labor_fluctuations.pdf}
+    \end{center}
+    \vspace{-0.8em}
+    \small
+    \textbf{Amplification}: $z\!\uparrow$ $\Rightarrow$ $S\!\uparrow$ $\Rightarrow$ vacancy posting $\uparrow$ $\Rightarrow$ $\theta\!\uparrow$, $\lambda_w\!\uparrow$, $v\!\uparrow$; unemployment falls. $\lambda_f$ is \textbf{countercyclical}: tight markets $\to$ harder to fill vacancies.
+\end{frame}
+
+% ============================================================================
+% SLIDE 18: SUMMARY
+% ============================================================================
+\begin{frame}{Summary and Takeaways}
+    \begin{columns}[T]
+        \begin{column}{0.48\textwidth}
+            \textbf{Problem 1}:
+            \begin{itemize}
+                \item Chebyshev excels on smooth functions; splines handle kinks and local features
+                \item 3D: cubic spline most accurate; Chebyshev competitive on smooth regions
+                \item Occupational choice + collateral constraints drive wealth concentration
+                \item Entrepreneurial returns generate Pareto-like wealth tails
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \textbf{Problem 2}:
+            \begin{itemize}
+                \item DMP: two-equation system in $(S, \lambda_w)$ captures search frictions
+                \item Newton converges fastest ($\sim$6 its); iterative is simple but slow ($\sim$125)
+                \item Linearization accurate near steady state; misses tail curvature
+                \item Amplification mechanism: productivity $\to$ surplus $\to$ tightness $\to$ labor-market outcomes
+            \end{itemize}
+        \end{column}
+    \end{columns}
+    \vspace{0.5em}
+    \centering
+    \small
+    Code: \texttt{notebooks/pset2\_problem1.ipynb} and \texttt{notebooks/pset2\_problem2.ipynb}.
+\end{frame}
+
+% ============================================================================
+% APPENDIX
+% ============================================================================
+\appendix
+
+\begin{frame}[plain]
+    \begin{center}
+        {\Large \textbf{Appendix}}
+    \end{center}
+\end{frame}
+
+% ============================================================================
+% APPENDIX A: CALIBRATION TABLES
+% ============================================================================
+\begin{frame}{Appendix: Problem 1 --- Calibration}
+    \footnotesize
+    \begin{center}
+    \begin{tabular}{llcl}
+        \toprule
+        \textbf{Parameter} & \textbf{Symbol} & \textbf{Value} & \textbf{Description} \\
+        \midrule
+        \multicolumn{4}{l}{\emph{Static occupational choice (Problem 1.2)}} \\
+        Capital share & $\alpha$ & $1/3$ & Cobb--Douglas \\
+        Returns to scale & $\eta$ & $0.85$ & Span-of-control \\
+        Wage / Rental rate & $W$\,/\,$R$ & $1.0$\,/\,$0.10$ & \\
+        Leverage & $\lambda$ & $2.0$ & Collateral multiplier \\
+        \midrule
+        \multicolumn{4}{l}{\emph{Dynamic extension}} \\
+        $\beta$, $\gamma$, $r$ & & $0.95$, $2.0$, $0.02$ & CRRA preferences \\
+        $e$: $n_e$, $\rho_e$, $\sigma_e$ & & $5$, $0.90$, $0.20$ & Labor ability \\
+        $z$: $n_z$, $\rho_z$, $\sigma_z$ & & $5$, $0.90$, $0.30$ & Entrep.\ ability \\
+        Asset grid & $n_a$, $\bar a$ & $120$, $200$ & Grid \\
+        \bottomrule
+    \end{tabular}
+    \end{center}
+\end{frame}
+
+% ============================================================================
+% APPENDIX B: NEWTON JACOBIAN
+% ============================================================================
+\begin{frame}{Appendix: Problem 2 --- Newton Jacobian Structure}
+    Stack unknowns $x = (S_1,\ldots,S_N,\lambda_{w,1},\ldots,\lambda_{w,N})'$. The $2N\times 2N$ Jacobian has block structure:
+    \[
+    J = \begin{pmatrix}
+    \partial F^S/\partial S & \partial F^S/\partial\lambda_w \\
+    \partial F^\lambda/\partial S & \partial F^\lambda/\partial\lambda_w
+    \end{pmatrix}
+    \]
+    \vspace{0.2em}
+    \small
+    \begin{align*}
+    \frac{\partial F^S}{\partial S} &= I - \beta\,\mathrm{diag}(1-\sigma-\gamma\lambda_w)\,P \\[4pt]
+    \frac{\partial F^S}{\partial\lambda_w} &= \gamma\beta\,\mathrm{diag}(PS) \\[4pt]
+    \frac{\partial F^\lambda}{\partial S} &= -\frac{1-\alpha}{\alpha}\,\mathrm{diag}\!\left(\frac{\lambda_w}{PS}\right)P \\[4pt]
+    \frac{\partial F^\lambda}{\partial\lambda_w} &= I
+    \end{align*}
+    \normalsize
+    Newton converges quadratically; Broyden approximates $J$ with rank-one updates.
+\end{frame}
+
+\end{document}

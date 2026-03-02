@@ -25,8 +25,24 @@ def qnwcheb(n: int, a: float, b: float) -> Tuple[np.ndarray, np.ndarray]:
     return nodes, weights
 
 
-def qnwnorm(n: int, mu: float = 0.0, sigma: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
-    """Gauss-Hermite quadrature for N(mu, sigma^2)."""
+def qnwnorm(
+    n: int, mu: float = 0.0, sigma: float = None, sig2: float = None
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Gauss-Hermite quadrature for N(mu, sigma^2).
+
+    Parameters
+    ----------
+    n : int
+        Number of quadrature nodes.
+    mu : float, optional
+        Mean of the normal.
+    sigma : float, optional
+        Standard deviation.
+    sig2 : float, optional
+        Variance (CompEcon-compatible alias). If both are provided, ``sigma`` wins.
+    """
+    if sigma is None:
+        sigma = np.sqrt(sig2) if sig2 is not None else 1.0
     x, w = hermite.hermgauss(n)
     nodes = np.sqrt(2.0) * sigma * x + mu
     weights = w / np.sqrt(np.pi)

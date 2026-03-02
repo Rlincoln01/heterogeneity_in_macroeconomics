@@ -443,9 +443,65 @@ from hetmacro.optimize import broyden  # or brentq per state
 # Diagnostic: residual = euler_lhs - euler_rhs; np.max(np.abs(residual))
 ```
 
+### Playbook 5: Solve household problems with the modular class
+
+**When:** You want a reusable architecture that separates income process, problem primitives, and numerical solver.
+
+1. Build an income block (`DiscreteIncome`, `RouwenhorstIncome`, `TauchenIncome`, or `ContinuousQuadratureIncome`).
+2. Create a household object with primitives (`beta`, `gamma`, `r`, grid).
+3. Solve with one solver block (`GridVFI`, `HowardImprovement`, `EGM`, `PolicyFunctionIteration`, collocation wrappers).
+4. Use post-solve methods: `compute_ergodic`, `compute_aggregates`, `euler_check`, `simulate`.
+
+```python
+from hetmacro.income_process import RouwenhorstIncome
+from hetmacro.household import Household
+from hetmacro.solvers import GridVFI
+from hetmacro.grids import make_asset_grid
+
+income = RouwenhorstIncome.from_ar1(n=7, rho=0.9, sigma=0.2)
+hh = Household(income_process=income, a_grid=make_asset_grid(0, 50, 300),
+               beta=0.96, gamma=2.0, r=0.04, w=1.0)
+pol = hh.solve(GridVFI())
+g = hh.compute_ergodic()
+agg = hh.compute_aggregates()
+```
+
+### Playbook 6: Choose a solver method
+
+**Decision rule:**
+
+- `GridVFI`: safest baseline; use first for new models.
+- `HowardImprovement`: use when VFI is stable but slow.
+- `PolicyFunctionIteration` (classical): use when policy convergence is the bottleneck; this is policy-eval + improvement, not Euler-root iteration.
+- `EGM`: preferred for standard one-asset savings with smooth policy.
+- `CollocationVFI_*`: use when you need smooth policy/value representation with fewer coefficients.
+
+Start with `GridVFI` for validation, then switch to accelerated methods.
+
+### Playbook 7: Compute ergodic distributions consistently
+
+1. Convert policy to a common evaluation grid.
+2. Build a lottery transition (`compute_joint_transition_matrix`) or quadrature transition for continuous shocks.
+3. Solve stationary distribution (`stationary_dist` or `stationary_eigenvector`).
+4. Verify row sums, stationarity residual, and boundary mass.
+
+For method comparison, always keep the evaluation grid fixed across solvers.
+
+### Playbook 8: Manage solve grid vs output grid
+
+Projection/collocation methods may solve on nonuniform nodes (Greville, Chebyshev, endogenous grid), but aggregation/distribution must use a consistent output grid.
+
+- Keep these concepts separate:
+  - **Solve grid**: where Bellman equations are enforced.
+  - **Output grid**: where policies are evaluated for moments/distributions.
+- Use a common `policy.evaluate(a, z)` interface before forward iteration.
+- Never compare ergodic moments across methods unless output-grid evaluation is aligned.
+
 ---
 
-## CompEcon Comparison Notes- `qnwcheb` now supports `kind="clenshaw_curtis"` to match CompEcon’s `qnwcheb`. Default `kind="gauss"` retains Gauss‑Chebyshev weights.
+## CompEcon Comparison Notes
+
+- `qnwcheb` now supports `kind="clenshaw_curtis"` to match CompEcon’s `qnwcheb`. Default `kind="gauss"` retains Gauss-Chebyshev weights.
 - `qnwbeta` weights are normalized to the Beta pdf (expectations now match analytical moments).
-- `qnwnorm` uses `sigma` (std) in hetmacro; CompEcon uses `sig2` (variance/covariance).
+- `qnwnorm` accepts both `sigma` (std) and `sig2` (variance, CompEcon-compatible alias). If both are provided, `sigma` takes precedence.
 - `gridmake` output orientation differs: hetmacro returns `(N,d)` while CompEcon returns `(d,N)`. Use `.T` when needed for compatibility.
