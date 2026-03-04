@@ -1948,61 +1948,63 @@ def J_from_F(F: np.ndarray) -> np.ndarray
 
 This module demonstrates how to combine \texttt{hetmacro} tools to solve a complete model.
 
-\subsection{Function: \texttt{solve\_steady\_state}}
+\subsection{Function: \texttt{solve\_aiyagari\_ge}}
 
 \begin{lstlisting}
-def solve_steady_state(
-    beta: float = 0.96,
-    eis: float = 1.0,
-    rho: float = 0.9,
-    sigma: float = 0.2,
-    n_e: int = 7,
-    amin: float = 0.0,
-    amax: float = 50.0,
-    n_a: int = 500,
+def solve_aiyagari_ge(
+    solver,
+    income_process: IncomeProcess,
+    a_grid: np.ndarray,
+    beta: float,
+    gamma: float,
     alpha: float = 0.36,
     delta: float = 0.08,
     r_bounds: Tuple[float, float] = (0.005, 0.04),
-) -> Dict[str, np.ndarray]
+    tol_ge: float = 1e-6,
+    method: str = "brentq",
+    max_iter: int = 100,
+    verbose: bool = False,
+    solver_kwargs: Optional[Dict] = None,
+) -> Dict[str, Any]
 \end{lstlisting}
 
-\textbf{Purpose:} Solve the Aiyagari model steady state with idiosyncratic income risk.
+\textbf{Purpose:} Solve the Aiyagari model GE steady state with any solver backend.
 
 \textbf{Workflow:}
 \begin{enumerate}
-    \item Discretize income process using \texttt{rouwenhorst}
-    \item Create asset grid using \texttt{make\_asset\_grid}
-    \item Define household problem given prices
-    \item Find market-clearing interest rate using \texttt{market\_clearing}
+    \item Accept a solver object (EGM, GridVFI, PFI, HowardGrid, etc.)
+    \item For each candidate $r$: compute prices, build \texttt{Household}, solve, compute ergodic distribution and aggregates
+    \item Find market-clearing $r^*$ using Brent (\texttt{method="brentq"}) or bisection (\texttt{method="bisection"})
 \end{enumerate}
+
+\textbf{Returns:} Dictionary with \texttt{r, K, w, Y, C, household, solved\_policy, distribution, aggregates, solver\_name, method, n\_iterations, elapsed}.
+
+\subsection{Function: \texttt{capital\_supply\_curve}}
+
+Evaluates household capital supply $K_s(r)$ on a grid of interest rates for plotting supply vs demand curves.
 
 \textbf{Example:}
 \begin{lstlisting}
-from hetmacro.models.aiyagari import solve_steady_state
-import matplotlib.pyplot as plt
+from hetmacro.models.aiyagari import solve_aiyagari_ge, capital_supply_curve
+from hetmacro.income_process import RouwenhorstIncome
+from hetmacro.grids import make_asset_grid
+from hetmacro.solvers.egm import EGM
 
-# Solve model
-ss = solve_steady_state(
-    beta=0.96, 
-    eis=1.0, 
-    rho=0.9, 
-    sigma=0.2,
-    n_a=500
+income = RouwenhorstIncome.from_ar1(n=7, rho=0.9, sigma=0.2)
+a_grid = make_asset_grid(0, 50, 500, curvature=2.0)
+
+# Solve GE
+ss = solve_aiyagari_ge(
+    EGM(), income, a_grid,
+    beta=0.96, gamma=1.0, verbose=True
 )
+print(f"r* = {ss['r']:.4f}, K* = {ss['K']:.2f}")
 
-print(f"Equilibrium interest rate: {ss['r']:.4f}")
-print(f"Aggregate capital: {ss['K']:.2f}")
-print(f"Aggregate consumption: {ss['C']:.2f}")
-
-# Plot consumption policy
-plt.figure(figsize=(10, 6))
-for i in range(ss['c'].shape[0]):
-    plt.plot(ss['a_grid'], ss['c'][i], label=f'e={i}')
-plt.xlabel('Assets')
-plt.ylabel('Consumption')
-plt.title('Consumption Policy Functions')
-plt.legend()
-plt.show()
+# Supply/demand curves
+curves = capital_supply_curve(
+    EGM(), income, a_grid,
+    beta=0.96, gamma=1.0, verbose=True
+)
 \end{lstlisting}
 
 % ==================================================================
@@ -2197,7 +2199,7 @@ ss = market_clearing((0.01, 0.04), hh_ss, K_demand)
 from hetmacro.ssj import jacobian
 
 # 1. Get steady state
-ss = solve_steady_state(...)
+ss = solve_aiyagari_ge(...)
 
 # 2. Compute Jacobians
 Js = jacobian(ss, {"r": {"r": 1.0}}, T=300)

@@ -136,8 +136,14 @@ pip install -r requirements.txt
 ### Quick example (Aiyagari steady state)
 
 ```python
-from hetmacro.models.aiyagari import solve_steady_state
-ss = solve_steady_state()
+from hetmacro.models.aiyagari import solve_aiyagari_ge
+from hetmacro.income_process import RouwenhorstIncome
+from hetmacro.grids import make_asset_grid
+from hetmacro.solvers.egm import EGM
+
+income = RouwenhorstIncome.from_ar1(n=7, rho=0.9, sigma=0.2)
+a_grid = make_asset_grid(0, 50, 500, curvature=2.0)
+ss = solve_aiyagari_ge(EGM(), income, a_grid, beta=0.96, gamma=1.0)
 ```
 
 ### Composable interface
