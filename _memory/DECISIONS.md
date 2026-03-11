@@ -36,6 +36,12 @@ Context: `compute_joint_transition_matrix` used a pure Python triple loop buildi
 Decision: (1) Vectorized `compute_joint_transition_matrix` to return sparse CSR via COO construction. (2) `stationary_dist` routes sparse input to `stationary_eigenvector`, keeps dense lstsq as fallback. (3) `stationary_eigenvector` has power iteration fallback if eigendecomposition fails. (4) `_compute_ergodic_quadrature` normalizes Q rows after construction.
 Rationale: Sparse path is faster and more memory-efficient for large grids. Power iteration fallback prevents silent failures. Row normalization handles clipping-induced deviations in the quadrature path.
 
+### 2026-03-04 — Collocation solver BSpline speedup (precompute knot vectors)
+
+Context: `CollocationVFI_Spline` was 9x slower than necessary because `cubic_basis_matrix` was called inside golden search inner loops, rebuilding sparse matrices on every evaluation.
+Decision: Replace `cubic_basis_matrix(breaks, x).toarray() @ coeffs` with `scipy.interpolate.BSpline(knots, coeffs, 3)(x)` using precomputed knot vectors. Also precompute `theta @ Pi[j,:]` outside closures.
+Rationale: BSpline.__call__ is a single vectorized C-level evaluation, no matrix construction. PE speedup: 63.6s -> 6.8s (9.4x). GE speedup: ~550s -> ~65s (8.5x). L_inf parity with EGM unchanged.
+
 ### 2026-03-02 — Ergodic distribution validated across all 12 solver configurations
 
 Context: `compute_ergodic()` had only been tested for EGM (quadrature). Needed verification that all 9 solver types (6 discrete + 6 continuous, with overlap) produce valid stationary distributions.

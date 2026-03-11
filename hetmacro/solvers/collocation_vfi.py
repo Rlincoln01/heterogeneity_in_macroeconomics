@@ -7,6 +7,7 @@ from typing import Optional
 
 import numpy as np
 from scipy import sparse
+from scipy.interpolate import BSpline as _BSpline
 from scipy.sparse.linalg import factorized, spsolve
 
 from ..grids import make_grid_1d
@@ -67,6 +68,32 @@ class _CollocationEngine:
             self._init_continuous(income, n_a, n_z, a_power)
 
     # ------------------------------------------------------------------
+    # Fast B-spline evaluation (avoids rebuilding sparse matrices)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_knots(breaks):
+        """Open knot vector for degree-3 B-splines (same as _bspline_knots)."""
+        bp = np.asarray(breaks)
+        return np.concatenate([np.repeat(bp[0], 4), bp[1:-1], np.repeat(bp[-1], 4)])
+
+    def _eval_bspline_a(self, x, coeffs):
+        """Evaluate B-spline(s) with given coefficients at points *x*.
+
+        Equivalent to ``cubic_basis_matrix(self.a_breaks, x).toarray() @ coeffs``
+        but avoids building or densifying the sparse matrix.
+
+        Parameters
+        ----------
+        x : (n,) array
+            Evaluation points (will be clipped to [amin, amax]).
+        coeffs : (n_basis_a,) or (n_basis_a, m) array
+            B-spline coefficients.  If 2-D, returns (n, m) array.
+        """
+        x_clip = np.clip(np.asarray(x), self.amin, self.amax)
+        return _BSpline(self._knots_a, coeffs, 3, extrapolate=False)(x_clip)
+
+    # ------------------------------------------------------------------
     # Discrete income branch: 1D basis in *a*, theta shape (n_basis_a, n_z)
     # ------------------------------------------------------------------
 
@@ -78,6 +105,7 @@ class _CollocationEngine:
         if self.basis_type == "spline":
             ua = np.linspace(0.0, 1.0, n_a)
             self.a_breaks = self.amin + (self.amax - self.amin) * ua ** a_power
+            self._knots_a = self._make_knots(self.a_breaks)
             self.a_nodes = greville_abscissae(self.a_breaks, degree=3)
             self.n_basis_a = self.a_nodes.size
             Phi_a = cubic_basis_matrix(self.a_breaks, self.a_nodes)
@@ -120,11 +148,11 @@ class _CollocationEngine:
         for j in range(n_z):
             a_p = np.clip(a_prime_mat[:, j], self.amin, self.amax)
             if self.basis_type == "spline":
-                Ba = cubic_basis_matrix(self.a_breaks, a_p).toarray()
+                theta_Ev = theta @ self.Pi[j, :]
+                out[:, j] = self._eval_bspline_a(a_p, theta_Ev)
             else:
                 Ba = cheb_basis(a_p, self.n_basis_a, self.amin, self.amax)
-            Ev = Ba @ theta @ self.Pi[j, :]
-            out[:, j] = Ev
+                out[:, j] = Ba @ theta @ self.Pi[j, :]
         return out
 
     # ------------------------------------------------------------------
@@ -149,6 +177,8 @@ class _CollocationEngine:
             ua = np.linspace(0.0, 1.0, n_a)
             self.a_breaks = self.amin + (self.amax - self.amin) * ua ** a_power
             self.z_breaks = np.linspace(self.zmin, self.zmax, n_z)
+            self._knots_a = self._make_knots(self.a_breaks)
+            self._knots_z = self._make_knots(self.z_breaks)
 
             self.a_nodes = greville_abscissae(self.a_breaks, degree=3)
             self.z_nodes = greville_abscissae(self.z_breaks, degree=3)
@@ -216,10 +246,10 @@ class _CollocationEngine:
     def _expected_continuation_continuous(self, a_prime, theta_mat):
         a_prime = np.clip(a_prime, self.amin, self.amax)
         if self.basis_type == "spline":
-            B_a = cubic_basis_matrix(self.a_breaks, a_prime).toarray()
+            BATheta = self._eval_bspline_a(a_prime, theta_mat)
         else:
             B_a = cheb_basis(a_prime, self.n_basis_a, self.amin, self.amax)
-        BATheta = B_a @ theta_mat
+            BATheta = B_a @ theta_mat
         out = np.zeros_like(a_prime)
         for w, B_z in zip(self.eps_w, self._z_basis_cache):
             out += w * np.sum(BATheta * B_z, axis=1)
@@ -264,15 +294,21 @@ class _CollocationEngine:
             hi = np.clip(m - self.c_floor, self.amin, self.amax)
             hi = np.maximum(hi, lo + 1e-12)
 
-            def obj(ap, _j=j, _m=m, _theta=theta):
-                ap = np.clip(ap, self.amin, self.amax)
-                c = np.maximum(_m - ap, self.c_floor)
-                if self.basis_type == "spline":
-                    Ba = cubic_basis_matrix(self.a_breaks, ap).toarray()
-                else:
+            if self.basis_type == "spline":
+                theta_Ev_j = theta @ self.Pi[j, :]
+
+                def obj(ap, _m=m, _tEv=theta_Ev_j):
+                    ap = np.clip(ap, self.amin, self.amax)
+                    c = np.maximum(_m - ap, self.c_floor)
+                    Ev = self._eval_bspline_a(ap, _tEv)
+                    return self._u(c) + self.beta * Ev
+            else:
+                def obj(ap, _j=j, _m=m, _theta=theta):
+                    ap = np.clip(ap, self.amin, self.amax)
+                    c = np.maximum(_m - ap, self.c_floor)
                     Ba = cheb_basis(ap, self.n_basis_a, self.amin, self.amax)
-                Ev = Ba @ _theta @ self.Pi[_j, :]
-                return self._u(c) + self.beta * Ev
+                    Ev = Ba @ _theta @ self.Pi[_j, :]
+                    return self._u(c) + self.beta * Ev
 
             ap_j, vn_j = golden_max_vec(obj, lo, hi, tol=self.policy_tol)
             a_pol[:, j] = ap_j
@@ -342,15 +378,21 @@ class _CollocationEngine:
                 hi = np.clip(m - self.c_floor, self.amin, self.amax)
                 hi = np.maximum(hi, lo + 1e-12)
 
-                def obj(ap, _j=j, _m=m, _theta=theta):
-                    ap = np.clip(ap, self.amin, self.amax)
-                    c = np.maximum(_m - ap, self.c_floor)
-                    if self.basis_type == "spline":
-                        Ba = cubic_basis_matrix(self.a_breaks, ap).toarray()
-                    else:
+                if self.basis_type == "spline":
+                    theta_Ev_j = theta @ self.Pi[j, :]
+
+                    def obj(ap, _m=m, _tEv=theta_Ev_j):
+                        ap = np.clip(ap, self.amin, self.amax)
+                        c = np.maximum(_m - ap, self.c_floor)
+                        Ev = self._eval_bspline_a(ap, _tEv)
+                        return self._u(c) + self.beta * Ev
+                else:
+                    def obj(ap, _j=j, _m=m, _theta=theta):
+                        ap = np.clip(ap, self.amin, self.amax)
+                        c = np.maximum(_m - ap, self.c_floor)
                         Ba = cheb_basis(ap, self.n_basis_a, self.amin, self.amax)
-                    Ev = Ba @ _theta @ self.Pi[_j, :]
-                    return self._u(c) + self.beta * Ev
+                        Ev = Ba @ _theta @ self.Pi[_j, :]
+                        return self._u(c) + self.beta * Ev
 
                 ap, vv = golden_max_vec(obj, lo, hi, tol=self.policy_tol)
                 policy_a[j] = ap
@@ -366,23 +408,36 @@ class _CollocationEngine:
             hi = np.clip(m - self.c_floor, self.amin, self.amax)
             hi = np.maximum(hi, lo + 1e-12)
 
-            def obj(ap):
-                ap = np.clip(ap, self.amin, self.amax)
-                c = np.maximum(m - ap, self.c_floor)
+            # Precompute z-basis outside golden search (does not depend on ap)
+            z_basis_eval = []
+            for eps, wq in zip(self.eps_nodes, self.eps_w):
+                z_next = np.clip(self.rho * Z_flat + eps, self.zmin, self.zmax)
                 if self.basis_type == "spline":
-                    Ba = cubic_basis_matrix(self.a_breaks, ap).toarray()
+                    Bz = _BSpline(self._knots_z, np.eye(self.n_basis_z), 3,
+                                  extrapolate=False)(z_next)
                 else:
+                    Bz = cheb_basis(z_next, self.n_basis_z, self.zmin, self.zmax)
+                z_basis_eval.append((wq, Bz))
+
+            if self.basis_type == "spline":
+                def obj(ap):
+                    ap = np.clip(ap, self.amin, self.amax)
+                    c = np.maximum(m - ap, self.c_floor)
+                    BATheta = self._eval_bspline_a(ap, theta_mat)
+                    cont = np.zeros_like(ap)
+                    for wq, Bz in z_basis_eval:
+                        cont += wq * np.sum(BATheta * Bz, axis=1)
+                    return self._u(c) + self.beta * cont
+            else:
+                def obj(ap):
+                    ap = np.clip(ap, self.amin, self.amax)
+                    c = np.maximum(m - ap, self.c_floor)
                     Ba = cheb_basis(ap, self.n_basis_a, self.amin, self.amax)
-                BATheta = Ba @ theta_mat
-                cont = np.zeros_like(ap)
-                for eps, wq in zip(self.eps_nodes, self.eps_w):
-                    z_next = np.clip(self.rho * Z_flat + eps, self.zmin, self.zmax)
-                    if self.basis_type == "spline":
-                        Bz = cubic_basis_matrix(self.z_breaks, z_next).toarray()
-                    else:
-                        Bz = cheb_basis(z_next, self.n_basis_z, self.zmin, self.zmax)
-                    cont += wq * np.sum(BATheta * Bz, axis=1)
-                return self._u(c) + self.beta * cont
+                    BATheta = Ba @ theta_mat
+                    cont = np.zeros_like(ap)
+                    for wq, Bz in z_basis_eval:
+                        cont += wq * np.sum(BATheta * Bz, axis=1)
+                    return self._u(c) + self.beta * cont
 
             ap, vv = golden_max_vec(obj, lo, hi, tol=self.policy_tol)
             policy_a = ap.reshape(na, nz).T
@@ -420,37 +475,25 @@ class _CollocationEngine:
         N = n_a * n_z
 
         u_vec = np.empty(N)
-        M = np.zeros((N, N))
-
-        for j in range(n_z):
-            m = self._resources(self.a_nodes, self.z_vals[j])
-            c = np.maximum(m - a_pol[:, j], self.c_floor)
-            u_vec[j * n_a:(j + 1) * n_a] = self._u(c)
-
-            ap_j = np.clip(a_pol[:, j], self.amin, self.amax)
-            if self.basis_type == "spline":
-                Ba_next = cubic_basis_matrix(self.a_breaks, ap_j).toarray()
-            else:
-                Ba_next = cheb_basis(ap_j, self.n_basis_a, self.amin, self.amax)
-
-            for k in range(n_z):
-                row_slice = slice(j * n_a, (j + 1) * n_a)
-                col_slice = slice(k * n_a, (k + 1) * n_a)
-                M[row_slice, col_slice] = (
-                    (np.eye(n_a) if j == k else np.zeros((n_a, n_a)))
-                    * (self._Phi_a_nodes if self.basis_type == "spline"
-                       else self._Phi_a_nodes)
-                )
-
         Phi_block = np.zeros((N, N))
         V_theta = np.zeros((N, N))
+
         for j in range(n_z):
             row_s = slice(j * n_a, (j + 1) * n_a)
+
+            # Flow utility
+            m = self._resources(self.a_nodes, self.z_vals[j])
+            c = np.maximum(m - a_pol[:, j], self.c_floor)
+            u_vec[row_s] = self._u(c)
+
+            # Phi block diagonal
             Phi_block[row_s, row_s] = self._Phi_a_nodes
 
+            # Basis at next-period assets
             ap_j = np.clip(a_pol[:, j], self.amin, self.amax)
             if self.basis_type == "spline":
-                Ba_next = cubic_basis_matrix(self.a_breaks, ap_j).toarray()
+                Ba_next = _BSpline.design_matrix(
+                    ap_j, self._knots_a, 3).toarray()
             else:
                 Ba_next = cheb_basis(ap_j, self.n_basis_a, self.amin, self.amax)
 
@@ -479,9 +522,10 @@ class _CollocationEngine:
         if self.basis_type == "spline":
             Phi_a_next = cubic_basis_matrix(self.a_breaks, a_pol)
             vtheta = sparse.csr_matrix((self.n_states, self.n_states))
-            for eps, wq in zip(self.eps_nodes, self.eps_w):
-                z_next = np.clip(self.rho * self._Z_nodes + eps, self.zmin, self.zmax)
-                Phi_z_next = cubic_basis_matrix(self.z_breaks, z_next)
+            for idx, (eps, wq) in enumerate(zip(self.eps_nodes, self.eps_w)):
+                # Reuse cached z-basis (evaluated at self._Z_nodes)
+                Bz_dense = self._z_basis_cache[idx]
+                Phi_z_next = sparse.csr_matrix(Bz_dense)
                 Phi_next = tensor_basis_matrix(Phi_a_next, Phi_z_next).tocsr()
                 vtheta = vtheta + self.beta * wq * Phi_next
             lhs = self.Phi - vtheta
