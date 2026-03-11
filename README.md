@@ -64,6 +64,7 @@ examples/
   pset1/                # Quadrature, nonlinear solvers, labor supply, portfolio
   pset2/                # Collocation, projection, lifecycle models
   pset3/                # Income fluctuation, VFI, Howard, ergodic distributions
+  pset5/                # Aiyagari GE: multi-solver comparison, supply/demand curves
 
 tests/
   test_basis_and_stationary.py
@@ -118,6 +119,7 @@ All solvers implement `.solve(household) -> SolvedPolicy`.
 - **pset1/** — Quadrature, nonlinear solvers (Broyden, Nelder-Mead), two-period labor supply, portfolio choice. Includes report PDF.
 - **pset2/** — Rouwenhorst diagnostics, cake-eating with collocation/projection, lifecycle model. Includes slides.
 - **pset3/** — Income fluctuation problems (discrete + AR(1)), VFI, Howard improvement, ergodic distributions. Includes slides and TeX source.
+- **pset5/** — Aiyagari GE steady state: multi-solver comparison (EGM, PFI, HowardGrid, HowardImprovement, CollocationVFI_Spline), capital supply/demand curves, Euler diagnostics.
 
 **Benchmarks**: `examples/benchmark_howard_euler_speed.py` compares Howard vs Euler solver performance.
 

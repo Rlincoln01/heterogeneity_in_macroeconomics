@@ -2126,21 +2126,32 @@ Plot the Euler residual over the state space to verify accuracy. See Macro Bible
     |quadrature|    |interpolation|    | markov |
     +---------+    +-----+-----+    +----+----+
                          |               |
-                         +-------+-------+
+                    +----v---------------v----+
+                    |     income_process      |
+                    +------------+------------+
+                                 |
+              +------------------+------------------+
+              |                                     |
+    +---------v---------+              +------------v-----------+
+    |    backward /     |              |       solvers/*        |
+    | dp_tools / forward|              | (EGM, VFI, PFI, ...)  |
+    +---------+---------+              +------------+-----------+
+              |                                     |
+              +------------------+------------------+
                                  |
                     +------------v-----------+
-                    |       backward         |
-                    +------------+-----------+
-                                 |
-                    +------------v-----------+
-                    |        forward         |
+                    |   household (+ dist.)  |
                     +------------+-----------+
                                  |
               +-----------------+------------------+
               |                                    |
     +---------v---------+              +-----------v-----------+
     |   steady_state    |              |         ssj           |
-    +-------------------+              +-----------------------+
+    +---------+---------+              +-----------------------+
+              |
+    +---------v---------+
+    |  models/aiyagari  |
+    +-------------------+
 \end{verbatim}
 
 \section{Common Workflows}
@@ -2168,9 +2179,9 @@ This checklist is the compact, module-level API reference for agents and users. 
     \item \texttt{dp\_tools.py}: \texttt{solve\_policy\_egm}, \texttt{solve\_policy\_vfi}, \texttt{solve\_steady\_policy}, \texttt{interp\_grid}, \texttt{solve\_euler\_one\_asset}
     \item \texttt{income\_process.py}: \texttt{DiscreteIncome}, \texttt{RouwenhorstIncome}, \texttt{TauchenIncome}, \texttt{ContinuousQuadratureIncome}
     \item \texttt{household.py}: \texttt{SolvedPolicy}, \texttt{Household}
-    \item \texttt{solvers/*}: \texttt{GridVFI}, \texttt{HowardImprovement}, \texttt{PolicyFunctionIteration}, \texttt{EGM}, \texttt{CollocationVFI\_Spline}, \texttt{CollocationVFI\_Chebyshev}
+    \item \texttt{solvers/*}: \texttt{GridVFI}, \texttt{HowardGrid}, \texttt{HowardImprovement}, \texttt{PolicyFunctionIteration}, \texttt{EGM}, \texttt{CollocationVFI\_Spline}, \texttt{CollocationVFI\_Chebyshev}, \texttt{NaiveEulerIteration}, \texttt{HowardEulerIteration}
     \item \texttt{ssj.py}: \texttt{jacobian}, \texttt{step1\_backward}, \texttt{J\_from\_F}
-    \item \texttt{models/aiyagari.py}: \texttt{firm\_k\_demand}, \texttt{firm\_wage}, \texttt{solve\_steady\_state}
+    \item \texttt{models/aiyagari.py}: \texttt{firm\_k\_demand}, \texttt{firm\_wage}, \texttt{capital\_supply\_curve}, \texttt{solve\_aiyagari\_ge}
 \end{itemize}
 
 Use this section as a checklist during releases and after API edits.
