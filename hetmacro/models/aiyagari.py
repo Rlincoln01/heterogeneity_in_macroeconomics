@@ -258,3 +258,125 @@ def solve_aiyagari_ge(
         "n_iterations": n_eval[0],
         "elapsed": total_time,
     }
+
+
+# ── Transition path convenience wrapper ────────────────────────────────
+
+def aiyagari_transition_path(
+    shock_path: Dict[str, np.ndarray],
+    Pi: np.ndarray,
+    a_grid: np.ndarray,
+    y: np.ndarray,
+    beta: float,
+    gamma: float,
+    alpha: float = 0.36,
+    delta: float = 0.08,
+    ss_initial: Optional[Dict] = None,
+    ss_terminal: Optional[Dict] = None,
+    T: int = 300,
+    method: str = "shooting",
+    damping: float = 0.5,
+    tol: float = 1e-6,
+    max_iter: int = 200,
+    backward_fn=None,
+    verbose: bool = False,
+    plot_progress: bool = False,
+) -> "TransitionResult":
+    """Compute transition dynamics in the Aiyagari model after an MIT shock.
+
+    Parameters
+    ----------
+    shock_path : dict
+        Time paths of shocks, e.g. ``{'Z': np.ndarray}`` for TFP.
+        Each array must have length *T*.
+    Pi : ndarray
+        Markov transition matrix for income states.
+    a_grid : ndarray
+        Asset grid.
+    y : ndarray
+        Steady-state income grid (z_grid values such that E[z]=1).
+    beta, gamma : float
+        Discount factor and CRRA coefficient.
+    alpha, delta : float
+        Capital share and depreciation rate.
+    ss_initial : dict, optional
+        Pre-computed initial steady state from ``household_steady_state``.
+        If *None*, computed internally from the steady-state prices.
+    ss_terminal : dict, optional
+        Pre-computed terminal steady state.  If *None*, same as
+        *ss_initial* (mean-reverting shock).
+    T : int
+        Number of transition periods.
+    method : str
+        ``"shooting"`` or ``"root_finding"``.
+    damping : float
+        Damping parameter for shooting.
+    tol, max_iter : float, int
+        Convergence tolerance and iteration limit.
+    backward_fn : callable, optional
+        Custom backward step (see ``make_backward_fn``).
+    verbose, plot_progress : bool
+        Print iteration info / show live plots.
+
+    Returns
+    -------
+    TransitionResult
+    """
+    from ..steady_state import household_steady_state
+    from ..transition import TransitionResult, compute_transition_path
+
+    eis = 1.0 / gamma
+
+    # Compute initial SS if not provided
+    # NOTE: y is the productivity grid (E[z]=1). Income = w * y.
+    z_grid = y  # productivity levels (renamed for clarity)
+
+    if ss_initial is None:
+        from ..optimize import brentq
+
+        def _excess(r):
+            K_d = firm_k_demand(r, alpha, delta)
+            w = firm_wage(K_d, alpha)
+            y_income = w * z_grid
+            ss = household_steady_state(Pi, a_grid, y_income, r, beta, eis)
+            return ss["A"] - K_d
+
+        r_upper = 1.0 / beta - 1.0 - 1e-4
+        r_star = brentq(_excess, 0.001, r_upper, tol=1e-8)
+        K_d = firm_k_demand(r_star, alpha, delta)
+        w_star = firm_wage(K_d, alpha)
+        ss_initial = household_steady_state(
+            Pi, a_grid, w_star * z_grid, r_star, beta, eis,
+        )
+        if verbose:
+            print(f"  Computed initial SS: r*={r_star:.6f}  K={ss_initial['A']:.4f}  "
+                  f"w*={w_star:.4f}")
+
+    if ss_terminal is None:
+        ss_terminal = ss_initial
+
+    # Build TFP path (default to 1 if not in shock_path)
+    Z_path = shock_path.get("Z", np.ones(T))
+
+    def price_fn(K, t):
+        Z = float(Z_path[t])
+        r = Z * alpha * K ** (alpha - 1.0) - delta
+        w = Z * (1.0 - alpha) * K ** alpha
+        Y = Z * K ** alpha  # L=1
+        return {"r": r, "y": w * z_grid, "w": w, "Y": Y}
+
+    result = compute_transition_path(
+        ss_initial=ss_initial,
+        ss_terminal=ss_terminal,
+        price_fn=price_fn,
+        T=T,
+        method=method,
+        damping=damping,
+        tol=tol,
+        max_iter=max_iter,
+        backward_fn=backward_fn,
+        verbose=verbose,
+        plot_progress=plot_progress,
+    )
+
+    return result

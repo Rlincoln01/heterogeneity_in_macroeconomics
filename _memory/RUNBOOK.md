@@ -36,6 +36,13 @@ cd docs/codebook
 latexmk -pdf codebook.tex
 ```
 
+## Building transition path methods doc
+
+```bash
+cd docs
+pdflatex transition_path_methods.tex && pdflatex transition_path_methods.tex
+```
+
 ## Git workflow
 
 ```bash
@@ -57,7 +64,6 @@ git push origin dev/hetmacro-sync
 origin  git@github.com:Rlincoln01/heterogeneity_in_macroeconomics.git
 ```
 
-## Branch status (as of 2026-03-02)
+## Branch status (as of 2026-03-11)
 
-- `dev/hetmacro-sync`: 2 commits ahead of `main` (fast-forward merge possible).
-- Significant uncommitted work: `household.py`, `income_process.py`, `solvers/`, pset2, pset3, tests.
+- `dev/hetmacro-sync`: ahead of `main`. Uncommitted work being pushed this session.

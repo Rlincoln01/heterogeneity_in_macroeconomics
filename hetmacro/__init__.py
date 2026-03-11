@@ -15,6 +15,7 @@ __all__ = [
     "household",
     "solvers",
     "ssj",
+    "transition",
 ]
 
 __version__ = "0.1.0"

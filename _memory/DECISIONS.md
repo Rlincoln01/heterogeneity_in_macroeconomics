@@ -47,3 +47,39 @@ Rationale: BSpline.__call__ is a single vectorized C-level evaluation, no matrix
 Context: `compute_ergodic()` had only been tested for EGM (quadrature). Needed verification that all 9 solver types (6 discrete + 6 continuous, with overlap) produce valid stationary distributions.
 Decision: Added Stage C (discrete) and Stage D (continuous) smoke tests to `household_test.ipynb`. All 12 configurations pass: distributions sum to 1, non-negative, mean assets within 10-15% of EGM reference.
 Rationale: Establishes baseline correctness for the full solver-to-distribution pipeline.
+
+### 2026-03-11 — Transition path solver (transition.py)
+
+Context: hetmacro had no infrastructure for MIT shock / transition dynamics. Need backward-forward shooting and root-finding methods.
+Decision: Created `transition.py` with model-agnostic core (`compute_transition_path`, `_backward_path`, `_forward_path`) + Aiyagari convenience wrapper (`aiyagari_transition_path` in `models/aiyagari.py`). Two methods: shooting with damping and Broyden root-finding. `price_fn(K, t) -> dict` interface makes solver model-agnostic. `make_backward_fn` wraps Household+Solver into backward_fn callable for Level 2 API.
+Rationale: Follows the same two-tier pattern (low-level functions + high-level wrapper) as the rest of the package. Shooting is the standard approach (Virgiliu pset5); root-finding (demographic transition project) offers faster convergence.
+
+### 2026-03-11 — Income convention: household_steady_state takes income levels, not productivity
+
+Context: `household_steady_state(Pi, a_grid, y, r, ...)` uses `coh = y + (1+r)*a`. In Aiyagari, income = w*z. If `y = z_grid` (raw productivity), the SS and transition paths are inconsistent.
+Decision: Always pass `y = w * z_grid` to `household_steady_state`. The `aiyagari_transition_path` wrapper computes `w(r) * z_grid` internally. Fixed from initial bug where raw `z_grid` was passed.
+Rationale: Avoids silent income mismatch between SS computation and transition price_fn.
+
+### 2026-03-11 — Forward path returns capital (mean assets in D_t), not savings
+
+Context: `_forward_path` originally returned `K_path[t] = vdot(D_t, a_pol_t)` (savings at t = K_{t+1}). The shooting loop compared this with `K_guess[t]` (capital at t), creating a timing mismatch. In SS the bug is invisible (savings = capital), but during transitions prices were evaluated at the wrong capital.
+Decision: Changed `_forward_path` to return `K_path[t] = sum(D_t * a_grid)` (capital at time t = mean asset holdings in D_t). Resource constraint diagnostic now uses savings from policies directly: `RC_t = Y_t - C_t - A_t + (1-delta)*K_t` where `A_t = vdot(D_t, a_pol_t)`.
+Rationale: Ensures `K_guess[t]` and `K_implied[t]` both represent capital at time t. RC residual dropped from ~0.4 to ~2.6e-10 (machine precision).
+
+### 2026-03-11 — Live iteration plotting via _IterationPlotter class
+
+Context: `plot_iterations=True` in shooting method needed to show convergence live, not just a static post-convergence plot. `plt.ion()` approach failed in Jupyter inline backend (blank figure).
+Decision: Created `_IterationPlotter` class using `IPython.display.clear_output(wait=True)` + `display(fig)` for Jupyter, with `draw_idle()` fallback for terminal. Verbose output buffered and re-printed after each `clear_output`. All plotting wrapped in try/except so failures never lose computed results.
+Rationale: This is the standard Jupyter live-update pattern. Verbose buffering prevents `clear_output` from erasing iteration logs.
+
+### 2026-03-11 — Transition path LaTeX documentation
+
+Context: Needed mathematical reference for shooting and Broyden algorithms, in the style of the Macro Bible numerical appendix.
+Decision: Created standalone `docs/transition_path_methods.tex` covering setup, shooting algorithm (with EGM details including interpolation formula), Broyden root-finding, and application to Aiyagari TFP shock. Uses Macro Bible style conventions (algorithm environments, Palatino font, motivating paragraphs).
+Rationale: Serves as both a learning resource and documentation of the hetmacro transition solver internals.
+
+### 2026-03-11 — Housekeeping: commit backlog, README + codebook sync
+
+Context: Uncommitted work (BSpline speedup, pset5 updates, DECISIONS.md) was sitting on `dev/hetmacro-sync`. README was missing pset5. Codebook Quick Reference had stale API names and an incomplete dependency graph.
+Decision: Committed all pending changes in two commits. Updated README (added pset5). Fixed codebook: solvers list (added HowardGrid, NaiveEulerIteration, HowardEulerIteration), aiyagari API (solve_aiyagari_ge + capital_supply_curve), dependency graph (added household, income_process, solvers, models layers). Added .vscode/ to .gitignore.
+Rationale: Keep docs and code in sync; clear the commit backlog before further development.

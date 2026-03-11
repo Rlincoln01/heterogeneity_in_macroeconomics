@@ -1,6 +1,6 @@
 # hetmacro — Project Context
 
-> Last updated: 2026-03-02
+> Last updated: 2026-03-11
 
 ## Purpose
 
@@ -16,12 +16,13 @@ Dual-branch pattern throughout: discrete income (Markov Pi) vs. continuous incom
 
 ## Current state
 
-- **Core package:** ~5,600 lines across 15 modules + 7 solvers + 1 model (Aiyagari).
-- **Examples:** 3 problem sets (pset1: quadrature/optimization, pset2: collocation/lifecycle, pset3: income fluctuation/Howard), plus benchmark and household test notebooks.
+- **Core package:** ~6,000 lines across 16 modules + 7 solvers + 1 model (Aiyagari).
+- **New module:** `transition.py` (~550 lines) — MIT shock transition path solver (shooting + root-finding). Features: `_IterationPlotter` class for Jupyter-aware live iteration plotting (`plot_iterations=True`). Fully tested; demo notebook at `examples/pset5/notebooks/pset5_transition_path.ipynb`.
+- **Examples:** 4 problem sets (pset1: quadrature/optimization, pset2: collocation/lifecycle, pset3: income fluctuation/Howard, pset5: Aiyagari GE multi-solver + transition path), plus benchmark and household test notebooks.
 - **Tests:** 2 files (156 lines) covering basis functions and Euler iteration solvers. Coverage is thin.
-- **Docs:** Codebook (PDF from LaTeX), CompEcon comparison notes, `macro_agents.md` (500-line AI agent guide).
-- **Git:** 23 commits on `dev/hetmacro-sync` (2 ahead of `main`). Significant uncommitted work: `household.py`, `income_process.py`, `solvers/`, pset2, pset3, new tests.
-- **README:** Outdated; missing solvers subpackage, household/income_process modules, pset2/pset3.
+- **Docs:** Codebook (76 pages, PDF from LaTeX), `docs/transition_path_methods.tex` (standalone LaTeX on shooting + Broyden algorithms), CompEcon comparison notes, `macro_agents.md` (500-line AI agent guide).
+- **Git:** `dev/hetmacro-sync` branch, ahead of `main`. Working tree has uncommitted transition solver + docs.
+- **README:** Up to date with current structure, all psets, solvers, and examples documented.
 
 ## Key modules (by size)
 
@@ -49,7 +50,8 @@ Dual-branch pattern throughout: discrete income (Markov Pi) vs. continuous incom
 
 ## Immediate priorities
 
-1. Commit uncommitted work (household, solvers, pset2/3, tests).
-2. Update README to reflect actual project state.
-3. Expand test coverage beyond 2 files.
-4. Keep codebook.tex in sync with API changes.
+1. Transition path solver complete (shooting + Broyden + live plotting). Next: SSJ integration (future task).
+2. Expand test coverage beyond 2 files.
+3. Merge `dev/hetmacro-sync` into `main` when ready.
+4. Keep codebook.tex in sync with future API changes.
+5. Keep `docs/transition_path_methods.tex` in sync with transition.py changes.

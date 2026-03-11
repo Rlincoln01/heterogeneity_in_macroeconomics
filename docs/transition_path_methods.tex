@@ -1,0 +1,367 @@
+% ==================================================================
+% Transition Path Methods for Heterogeneous Agent Models
+% Mathematical documentation for hetmacro.transition
+% ==================================================================
+\documentclass[12pt]{article}
+
+% Core settings & fonts
+\usepackage[T1]{fontenc}
+\usepackage[sc]{mathpazo}
+\usepackage{geometry}
+\geometry{top=1in, bottom=1in, left=1in, right=1in}
+
+% General utilities
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+% Mathematics
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+
+% Theorem-like environments (matching Macro Bible style)
+\newtheorem{definition}{Definition}
+\newtheorem{algorithm_env}{Algorithm}
+\newtheorem{remark}{Remark}
+
+% Custom commands
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Reals}{\mathbb{R}}
+
+% Hyperlinks
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+\title{Transition Path Methods for Heterogeneous Agent Models}
+\author{Rafael Lincoln}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document provides the mathematical foundations behind the transition path solver implemented in \texttt{hetmacro.transition}. We cover two methods for computing perfect foresight transition dynamics after an MIT shock: (i) backward forward shooting with damped iteration, and (ii) root finding via Broyden's method. The exposition follows the style of the numerical appendix in the Macro Bible and is self contained.
+\end{abstract}
+
+\tableofcontents
+
+\newpage
+
+% ==================================================================
+\section{Setup: MIT Shocks and Transition Dynamics}
+% ==================================================================
+
+Consider a heterogeneous agent economy in steady state at $t = 0$. At $t = 1$, an unexpected (MIT) shock hits the economy. After the shock is realized, agents have perfect foresight over the entire future path of the economy. We seek to compute the transition path from the initial steady state back to the terminal steady state.
+
+\subsection{The Household Problem Along the Transition}
+
+Let $a$ denote asset holdings and $z$ idiosyncratic productivity. Along the transition, the household problem at date $t$ is:
+\begin{align}
+    V_t(a, z) = \max_{c, a'} \left\{ u(c) + \beta \sum_{z'} \Pi(z' \mid z) V_{t+1}(a', z') \right\} \label{eq:bellman_t}
+\end{align}
+subject to the budget constraint:
+\begin{align}
+    c + a' = (1 + r_t) a + y_t(z), \qquad a' \geq \underline{a} \label{eq:budget_t}
+\end{align}
+where $r_t$ is the interest rate at date $t$, $y_t(z) = w_t z$ is labor income, and $\Pi$ is the Markov transition matrix for the idiosyncratic state. The key difference from the stationary problem is that the value function, prices, and policies are all time varying.
+
+\paragraph{Terminal condition.} At $t = T$ (the terminal date), we impose that the economy has returned to its terminal steady state:
+\begin{align}
+    V_T(a, z) = V^{\text{ss}}(a, z) \label{eq:terminal}
+\end{align}
+This pins down the backward recursion. The horizon $T$ must be chosen large enough so that this boundary condition is innocuous.
+
+\subsection{Distribution Dynamics}
+
+Let $D_t(a, z)$ denote the joint distribution of assets and productivity at date $t$. Given a policy function $a'_t(a, z)$ and the Markov transition matrix $\Pi$, the distribution evolves forward as:
+\begin{align}
+    D_{t+1}(a', z') = \sum_{z} \Pi(z' \mid z) \sum_{a} \mathbf{1}\{a'_t(a, z) = a'\} D_t(a, z) \label{eq:forward_dist}
+\end{align}
+In practice, when policies do not land exactly on grid points, we use lottery weights (linear interpolation on the asset grid) to distribute mass across adjacent grid points.
+
+\paragraph{Initial condition.} At $t = 0$, the distribution is the initial steady state distribution:
+\begin{align}
+    D_0(a, z) = D^{\text{ss}}(a, z) \label{eq:initial_dist}
+\end{align}
+
+\subsection{Market Clearing}
+
+In the Aiyagari model, the aggregate capital stock equals mean asset holdings:
+\begin{align}
+    K_t = \sum_{a, z} a \cdot D_t(a, z) \label{eq:mkt_clearing}
+\end{align}
+Given aggregate capital $K_t$ and the exogenous shock path $\{Z_t\}_{t=0}^{T-1}$, prices are determined by firm optimality:
+\begin{align}
+    r_t &= Z_t \alpha K_t^{\alpha - 1} - \delta \label{eq:r_from_K} \\
+    w_t &= Z_t (1 - \alpha) K_t^{\alpha} \label{eq:w_from_K}
+\end{align}
+The transition path problem is to find a capital path $\{K_t\}_{t=0}^{T-1}$ such that market clearing \eqref{eq:mkt_clearing} holds at every date, given that household policies and distributions are consistent with the prices implied by this capital path.
+
+\subsection{Timing Convention}
+
+The timing follows the standard discrete time convention:
+\begin{itemize}[nosep]
+    \item $t = 0$: shock hits; agents re-optimize immediately.
+    \item $D_0 = D^{\text{ss}}$: the pre-shock steady state distribution (assets are predetermined).
+    \item $K_t = \sum_{a,z} a \cdot D_t(a,z)$: capital at time $t$ equals mean assets that agents \emph{bring into} period $t$.
+    \item $a'_t(a,z)$: savings chosen at $t$, which become assets at $t+1$.
+    \item Backward iteration: $t = T-1, T-2, \ldots, 0$.
+    \item Forward iteration: $t = 0, 1, \ldots, T-1$.
+\end{itemize}
+
+% ==================================================================
+\section{Method 1: Backward Forward Shooting}
+\label{sec:shooting}
+% ==================================================================
+
+The shooting method solves the transition path by iterating on the aggregate capital path. The idea is simple: guess a capital path, compute the implied household behavior, check whether the resulting distribution is consistent with the guessed capital, and update.
+
+\begin{algorithm_env}[Backward Forward Shooting with Damped Iteration]
+\label{algo:shooting}
+\mbox{} \\
+\textbf{Inputs:} Initial steady state $(\bar{K}, \bar{r}, D^{\text{ss}}, V_a^{\text{ss}})$, terminal steady state, shock path $\{Z_t\}_{t=0}^{T-1}$, damping parameter $\lambda \in (0,1)$, tolerance $\varepsilon > 0$. \\[6pt]
+\textbf{Initialize:} Set $K^{(0)}_t = \bar{K}$ for all $t$ (or use linear interpolation between initial and terminal steady state capital).
+\begin{enumerate}[label=\textbf{Step \arabic*.}, leftmargin=2.5cm]
+    \item \textbf{Compute prices.} For each $t = 0, \ldots, T-1$:
+    \begin{align*}
+        r^{(n)}_t = Z_t \alpha \left(K^{(n)}_t\right)^{\alpha - 1} - \delta, \qquad w^{(n)}_t = Z_t (1 - \alpha) \left(K^{(n)}_t\right)^{\alpha}
+    \end{align*}
+
+    \item \textbf{Backward iteration.} Starting from the terminal marginal value $V_a^{\text{ss}}$ at $t = T$, iterate backward using the Endogenous Grid Method (EGM):
+    \begin{align*}
+        \text{For } t = T-1, T-2, \ldots, 0: \qquad V_{a,t}, \; a'_t, \; c_t = \text{EGM}\left(V_{a,t+1}, \Pi, \mathcal{A}, y_t, r_t, \beta, \sigma^{-1}\right)
+    \end{align*}
+    where EGM denotes a single step of the endogenous grid method, which exploits the Euler equation:
+    \begin{align}
+        u'(c_t(a, z)) = \beta (1 + r_{t+1}) \sum_{z'} \Pi(z' \mid z) \, u'(c_{t+1}(a'_t(a,z), z')) \label{eq:euler_transition}
+    \end{align}
+    This produces a sequence of policy functions $\{a'_t, c_t\}_{t=0}^{T-1}$.
+
+    \item \textbf{Forward iteration.} Starting from $D_0 = D^{\text{ss}}$, iterate the distribution forward using the time varying policies:
+    \begin{align*}
+        \text{For } t = 0, 1, \ldots, T-1: \qquad D_{t+1} = \mathcal{T}(D_t, a'_t, \Pi)
+    \end{align*}
+    where $\mathcal{T}$ denotes the forward operator that distributes mass using lottery weights on the asset grid. At each date, compute the implied capital:
+    \begin{align}
+        \hat{K}_t = \sum_{a,z} a \cdot D_t(a, z) \label{eq:K_implied}
+    \end{align}
+
+    \item \textbf{Convergence check.} Compute the error:
+    \begin{align*}
+        e^{(n)} = \max_{0 \leq t \leq T-1} \left| \hat{K}_t - K^{(n)}_t \right|
+    \end{align*}
+    If $e^{(n)} < \varepsilon$, stop and return $\hat{K}$ as the equilibrium path.
+
+    \item \textbf{Damped update.} Update the capital path guess with damping:
+    \begin{align}
+        K^{(n+1)}_t = \lambda \, K^{(n)}_t + (1 - \lambda) \, \hat{K}_t \label{eq:damping}
+    \end{align}
+    Return to Step 1.
+\end{enumerate}
+\end{algorithm_env}
+
+\subsection{The Role of Damping}
+
+Without damping ($\lambda = 0$), the algorithm sets the next guess equal to the implied capital path. This often leads to oscillations: if the guess is too high, the implied path overshoots in the other direction, and so forth. Damping stabilizes convergence by taking a convex combination of the old guess and the new implied path.
+
+The parameter $\lambda$ controls the trade off between stability and speed:
+\begin{itemize}[nosep]
+    \item $\lambda$ close to 1: very stable but slow convergence (small steps).
+    \item $\lambda$ close to 0: fast but potentially unstable (large steps).
+    \item A good default is $\lambda = 2/3$, which corresponds to a step size of $1/3$. This is the value used in Midrigan's problem set 5.
+\end{itemize}
+
+\begin{remark}[Damping convention]
+In the implementation, the \texttt{damping} parameter equals $\lambda$, the weight on the \emph{old} guess. Some references (including Midrigan's notes) parametrize the update as:
+\begin{align*}
+    K^{(n+1)} = K^{(n)} + s \left(\hat{K} - K^{(n)}\right)
+\end{align*}
+where $s$ is the ``step size.'' The relationship is $s = 1 - \lambda$, so Midrigan's $s = 1/3$ corresponds to $\lambda = 2/3$.
+\end{remark}
+
+\subsection{The EGM Backward Step}
+
+Each backward step uses the Endogenous Grid Method of Carroll (2006). Given the continuation marginal value $V_{a,t+1}(a', z)$, the EGM step proceeds as follows:
+\begin{enumerate}[nosep]
+    \item Compute the expected marginal value of savings on the \emph{exogenous} grid of end of period assets $a' \in \mathcal{A}$:
+    \begin{align}
+        \E_t\left[V_{a,t+1}(a', z')\right] = \sum_{z'} \Pi(z' \mid z) \, V_{a,t+1}(a', z') \label{eq:EVa}
+    \end{align}
+
+    \item Invert the Euler equation to find consumption on this grid:
+    \begin{align}
+        c_t^*(a', z) = \left(\beta (1 + r_t) \, \E_t\left[V_{a,t+1}(a', z')\right]\right)^{-\sigma} \label{eq:egm_euler}
+    \end{align}
+    where $\sigma$ is the coefficient of relative risk aversion (the inverse of the elasticity of intertemporal substitution $\sigma^{-1}$).
+
+    \item Use the budget constraint to recover the \emph{endogenous} grid of beginning of period assets:
+    \begin{align}
+        a^*_t(a', z) = \frac{c_t^*(a', z) + a' - y_t(z)}{1 + r_t} \label{eq:egm_endogenous}
+    \end{align}
+
+    \item Interpolate: the previous step produced pairs $\bigl(a^*_t(a'_k, z),\; a'_k\bigr)$ on an \emph{endogenous} grid of beginning of period assets.  To obtain policies on the \emph{exogenous} grid $\mathcal{A} = \{a_1, \dots, a_N\}$ used by the rest of the algorithm, apply linear interpolation.  For each $a_i \in \mathcal{A}$, find the bracketing pair $a^*_j \leq a_i < a^*_{j+1}$ and set
+    \begin{align}
+        a'_t(a_i, z) \;=\; a'_j \;+\; \frac{a_i - a^*_j}{a^*_{j+1} - a^*_j}\,\bigl(a'_{j+1} - a'_j\bigr), \label{eq:egm_interp}
+    \end{align}
+    and analogously for consumption, $c_t(a_i, z) = c^*_j + \frac{a_i - a^*_j}{a^*_{j+1} - a^*_j}(c^*_{j+1} - c^*_j)$.
+
+    \item Enforce the borrowing constraint: if $a < a^*_t(\underline{a}, z)$, set $a'_t(a, z) = \underline{a}$ and $c_t(a, z) = (1 + r_t) a + y_t(z) - \underline{a}$.
+
+    \item Update the marginal value using the envelope condition:
+    \begin{align}
+        V_{a,t}(a, z) = (1 + r_t) \, u'(c_t(a, z)) \label{eq:envelope}
+    \end{align}
+\end{enumerate}
+
+\subsection{The Forward Operator}
+
+Given a distribution $D_t$ and a policy $a'_t$, the forward step computes $D_{t+1}$. Since policies generally do not land on grid points, we use lottery weights. For a given $(a, z)$ with policy $a'_t(a, z)$, find the bracketing grid points $a_i \leq a'_t(a, z) < a_{i+1}$ and compute the weight:
+\begin{align}
+    \omega = \frac{a_{i+1} - a'_t(a, z)}{a_{i+1} - a_i} \label{eq:lottery}
+\end{align}
+Then distribute the mass $D_t(a, z) \cdot \Pi(z' \mid z)$ across $(a_i, z')$ with weight $\omega$ and $(a_{i+1}, z')$ with weight $1 - \omega$.
+
+\subsection{Resource Constraint Diagnostic}
+
+After convergence, we verify the resource constraint at each date:
+\begin{align}
+    Y_t - C_t - A_t + (1 - \delta) K_t = 0 \label{eq:rc}
+\end{align}
+where $Y_t = Z_t K_t^\alpha$ is output, $C_t = \sum_{a,z} c_t(a,z) D_t(a,z)$ is aggregate consumption, and $A_t = \sum_{a,z} a'_t(a,z) D_t(a,z)$ is aggregate savings (next period's capital). The residual should be near machine precision ($\sim 10^{-10}$).
+
+
+% ==================================================================
+\section{Method 2: Root Finding via Broyden's Method}
+\label{sec:root_finding}
+% ==================================================================
+
+An alternative to the shooting method is to cast the transition path as a system of nonlinear equations and solve it directly using a quasi Newton method. This approach can converge faster (in fewer iterations), though each iteration is more expensive.
+
+\subsection{Formulation as a Root Finding Problem}
+
+Define the residual function $F: \R^T \to \R^T$ as follows. Given a candidate capital path $\mathbf{K} = (K_0, K_1, \ldots, K_{T-1})$:
+\begin{enumerate}[nosep]
+    \item Compute prices $\{r_t, w_t\}$ from $\mathbf{K}$ and $\{Z_t\}$.
+    \item Run the backward iteration to obtain policies $\{a'_t, c_t\}$.
+    \item Run the forward iteration to obtain implied capital $\{\hat{K}_t\}$.
+    \item Return the residual:
+\end{enumerate}
+\begin{align}
+    F(\mathbf{K}) = \hat{\mathbf{K}} - \mathbf{K} \label{eq:residual}
+\end{align}
+The equilibrium capital path satisfies $F(\mathbf{K}^*) = \mathbf{0}$. Steps 1 through 3 are identical to a single iteration of the shooting method.
+
+\subsection{Newton's Method and the Jacobian Problem}
+
+Newton's method would update the guess as:
+\begin{align}
+    \mathbf{K}^{(n+1)} = \mathbf{K}^{(n)} - \left[J_F(\mathbf{K}^{(n)})\right]^{-1} F(\mathbf{K}^{(n)}) \label{eq:newton}
+\end{align}
+where $J_F \in \R^{T \times T}$ is the Jacobian of $F$. Computing and inverting this Jacobian is prohibitively expensive for large $T$: each column requires a full backward forward pass (to compute one finite difference), so the cost is $O(T)$ evaluations of $F$, and inversion costs $O(T^3)$.
+
+\subsection{Broyden's Method: Rank 1 Jacobian Approximation}
+
+Broyden's method avoids computing the full Jacobian by maintaining a rank 1 approximation $B^{(n)} \approx J_F(\mathbf{K}^{(n)})$ that is updated at each step.
+
+\begin{algorithm_env}[Broyden's Method for Transition Paths]
+\label{algo:broyden}
+\mbox{} \\
+\textbf{Inputs:} Initial guess $\mathbf{K}^{(0)}$, tolerance $\varepsilon > 0$. \\[6pt]
+\textbf{Initialize:} Set $B^{(0)} = I$ (identity matrix) or a finite difference approximation.
+\begin{enumerate}[label=\textbf{Step \arabic*.}, leftmargin=2.5cm]
+    \item \textbf{Evaluate residual.} Compute $F(\mathbf{K}^{(n)})$ via one backward forward pass.
+
+    \item \textbf{Convergence check.} If $\|F(\mathbf{K}^{(n)})\|_\infty < \varepsilon$, stop.
+
+    \item \textbf{Compute search direction.} Solve for the Newton step:
+    \begin{align}
+        \Delta \mathbf{K}^{(n)} = -\left[B^{(n)}\right]^{-1} F(\mathbf{K}^{(n)}) \label{eq:broyden_step}
+    \end{align}
+
+    \item \textbf{Line search.} Optionally perform a line search (Armijo condition) to find a step size $\alpha_n$ such that:
+    \begin{align*}
+        \|F(\mathbf{K}^{(n)} + \alpha_n \Delta \mathbf{K}^{(n)})\| < \|F(\mathbf{K}^{(n)})\|
+    \end{align*}
+
+    \item \textbf{Update guess.}
+    \begin{align*}
+        \mathbf{K}^{(n+1)} = \mathbf{K}^{(n)} + \alpha_n \Delta \mathbf{K}^{(n)}
+    \end{align*}
+
+    \item \textbf{Update Jacobian approximation.} Define:
+    \begin{align*}
+        \mathbf{s}^{(n)} &= \mathbf{K}^{(n+1)} - \mathbf{K}^{(n)} \\
+        \mathbf{y}^{(n)} &= F(\mathbf{K}^{(n+1)}) - F(\mathbf{K}^{(n)})
+    \end{align*}
+    Apply the Broyden rank 1 update:
+    \begin{align}
+        B^{(n+1)} = B^{(n)} + \frac{(\mathbf{y}^{(n)} - B^{(n)} \mathbf{s}^{(n)}) (\mathbf{s}^{(n)})^\top}{\|\mathbf{s}^{(n)}\|^2} \label{eq:broyden_update}
+    \end{align}
+    Return to Step 1.
+\end{enumerate}
+\end{algorithm_env}
+
+\paragraph{Why Broyden works well here.} The key insight is that the Jacobian of the transition path residual $F$ has a special structure. A change in $K_t$ affects prices at date $t$, which propagates through the backward forward pass in a smooth, monotone fashion. The rank 1 updates capture this structure well after a few iterations, leading to superlinear convergence in practice.
+
+\subsection{Comparison of Methods}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+& \textbf{Shooting} & \textbf{Root finding (Broyden)} \\
+\midrule
+Cost per iteration & 1 backward forward pass & 1 backward forward pass \\
+Convergence rate & Linear & Superlinear \\
+Typical iterations & 25--40 & 10--20 \\
+Robustness & Very robust with damping & Sensitive to initial guess \\
+Tuning parameter & Damping $\lambda$ & Line search \\
+Memory & $O(T)$ & $O(T^2)$ (Jacobian approx.) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+In practice, shooting is the default choice due to its robustness. Root finding is useful when speed matters (shorter $T$, good initial guess) or when damping is difficult to tune.
+
+% ==================================================================
+\section{Application: TFP Shock in the Aiyagari Model}
+\label{sec:application}
+% ==================================================================
+
+Consider the standard Aiyagari (1994) economy with a Cobb Douglas production function $Y_t = Z_t K_t^\alpha$. At $t = 1$, an unexpected TFP shock hits:
+\begin{align}
+    \log Z_0 &= 0, \qquad \log Z_1 = 0.10 \label{eq:shock} \\
+    \log Z_t &= 0.95 \, \log Z_{t-1}, \quad t \geq 2 \notag
+\end{align}
+
+The price function that maps aggregate capital and time to household inputs is:
+\begin{align}
+    r_t &= Z_t \alpha K_t^{\alpha - 1} - \delta \notag \\
+    w_t &= Z_t (1 - \alpha) K_t^{\alpha} \notag \\
+    y_t(z) &= w_t \cdot z \label{eq:price_fn}
+\end{align}
+
+\paragraph{Calibration.} The baseline parameters are: $\beta = 0.99$, $\gamma = 1.5$ (CRRA), $\rho_z = 0.99$, $\sigma_\varepsilon = 0.10$, $\alpha = 0.35$, $\delta = 0.02$, with 11 Rouwenhorst income states and 501 asset grid points up to $\bar{a} = 2500$.
+
+\paragraph{Results.} The shooting method with $\lambda = 2/3$ converges in approximately 34 iterations. Capital rises above the steady state (agents save more in response to higher TFP and wages), then decays back as the shock fades. The resource constraint residual is near machine precision ($\sim 10^{-10}$). The root finding method (Broyden) matches the shooting solution to within $\sim 10^{-8}$ in capital.
+
+% ==================================================================
+\section{Implementation Notes}
+\label{sec:implementation}
+% ==================================================================
+
+The solver in \texttt{hetmacro.transition} is model agnostic. The user provides:
+\begin{enumerate}[nosep]
+    \item Steady state dictionaries (from \texttt{household\_steady\_state}) containing the distribution $D$, marginal value $V_a$, policies, and aggregates.
+    \item A price function \texttt{price\_fn(K, t) -> dict} that maps aggregate capital and time to household inputs $\{r, y, w\}$.
+\end{enumerate}
+
+\paragraph{Key design choices.}
+\begin{itemize}[nosep]
+    \item The backward step defaults to EGM (\texttt{backward\_egm}), but a custom \texttt{backward\_fn} can be provided to use any solver (VFI, Howard improvement, Euler iteration) via the \texttt{make\_backward\_fn} wrapper.
+    \item Capital at time $t$ is computed as $K_t = \sum_{a,z} a \cdot D_t(a,z)$ (mean assets in the distribution), not as aggregate savings from policies. This avoids a timing mismatch between the guess and the implied path.
+    \item The income argument to the steady state solver must be $y = w \cdot z$ (income levels), not raw productivity $z$. This ensures consistency between the steady state and the transition price function.
+\end{itemize}
+
+\end{document}
