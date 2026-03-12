@@ -20,6 +20,7 @@
 % Theorem-like environments (matching Macro Bible style)
 \newtheorem{definition}{Definition}
 \newtheorem{algorithm_env}{Algorithm}
+\newtheorem{proposition}{Proposition}
 \newtheorem{remark}{Remark}
 
 % Custom commands
@@ -42,7 +43,7 @@
 \maketitle
 
 \begin{abstract}
-This document provides the mathematical foundations behind the transition path solver implemented in \texttt{hetmacro.transition}. We cover two methods for computing perfect foresight transition dynamics after an MIT shock: (i) backward forward shooting with damped iteration, and (ii) root finding via Broyden's method. The exposition follows the style of the numerical appendix in the Macro Bible and is self contained.
+This document provides the mathematical foundations behind the transition path solver implemented in \texttt{hetmacro.transition}. We cover three methods for computing perfect foresight transition dynamics after an MIT shock: (i) backward forward shooting with damped iteration, (ii) root finding via Broyden's method over capital, and (iii) root finding over interest rates. We then cast the Aiyagari transition path as a coordination problem in the sense of Angeletos and Lian (2016), showing how the nature of strategic interaction (substitutability vs.\ complementarity) governs both equilibrium uniqueness and the convergence of the numerical methods.
 \end{abstract}
 
 \tableofcontents
@@ -325,6 +326,303 @@ Memory & $O(T)$ & $O(T^2)$ (Jacobian approx.) \\
 In practice, shooting is the default choice due to its robustness. Root finding is useful when speed matters (shorter $T$, good initial guess) or when damping is difficult to tune.
 
 % ==================================================================
+\section{Method 3: Root Finding over Interest Rates}
+\label{sec:root_finding_r}
+% ==================================================================
+
+The previous section parameterized the root finding problem in terms of the capital path $\mathbf{K}$. An alternative, and more economically natural formulation, is to search over the interest rate path $\mathbf{r}$ and define the residual as the excess demand for capital: the difference between household capital supply and firm capital demand. This mirrors the steady state equilibrium condition $K^s(r) - K^d(r) = 0$ directly.
+
+\subsection{Capital Supply and Demand}
+
+In the Aiyagari model, the firm's first order condition pins down capital demand as a function of the interest rate and TFP:
+\begin{align}
+    K^d_t(r_t) = \left(\frac{Z_t \alpha}{r_t + \delta}\right)^{\frac{1}{1 - \alpha}} \label{eq:K_demand}
+\end{align}
+This is a static, period by period relationship: given $r_t$ and $Z_t$, capital demand is uniquely determined.
+
+Capital supply is the outcome of household optimization. Given an entire path of interest rates $\mathbf{r} = (r_0, \ldots, r_{T-1})$, we can compute wages from $K^d$:
+\begin{align}
+    w_t = Z_t (1 - \alpha) \left(K^d_t\right)^{\alpha} \label{eq:wage_from_r}
+\end{align}
+then run the backward forward iteration (using $r_t$ and $y_t(z) = w_t z$ as inputs) to obtain the implied capital supply:
+\begin{align}
+    K^s_t(\mathbf{r}) = \sum_{a, z} a \cdot D_t(a, z) \label{eq:K_supply}
+\end{align}
+Note that $K^s_t$ depends on the \emph{entire} path $\mathbf{r}$ (through the backward iteration), not just $r_t$.
+
+\subsection{Excess Demand Formulation}
+
+Define the excess demand function $F: \R^T \to \R^T$:
+\begin{align}
+    F(\mathbf{r}) = K^s(\mathbf{r}) - K^d(\mathbf{r}) \label{eq:residual_r}
+\end{align}
+The equilibrium interest rate path satisfies $F(\mathbf{r}^*) = \mathbf{0}$: at every date, household asset supply equals firm capital demand.
+
+\begin{algorithm_env}[Broyden's Method over Interest Rates]
+\label{algo:broyden_r}
+\mbox{} \\
+\textbf{Inputs:} Steady state interest rate $\bar{r}$, terminal marginal value $V_a^{\text{ss}}$, initial distribution $D^{\text{ss}}$, shock path $\{Z_t\}$, tolerance $\varepsilon > 0$. \\[6pt]
+\textbf{Initialize:} Set $r^{(0)}_t = \bar{r}$ for all $t$ (flat at the steady state rate).
+\begin{enumerate}[label=\textbf{Step \arabic*.}, leftmargin=2.5cm]
+    \item \textbf{Compute capital demand and wages.} For each $t$:
+    \begin{align*}
+        K^d_t = \left(\frac{Z_t \alpha}{r^{(n)}_t + \delta}\right)^{\!\frac{1}{1-\alpha}}, \qquad w_t = Z_t(1-\alpha)(K^d_t)^\alpha
+    \end{align*}
+
+    \item \textbf{Backward iteration.} Using $\{r^{(n)}_t, w_t z\}$ as the price path, run EGM backward from $V_a^{\text{ss}}$ to obtain policies $\{a'_t, c_t\}_{t=0}^{T-1}$.
+
+    \item \textbf{Forward iteration.} Starting from $D_0 = D^{\text{ss}}$, iterate the distribution forward to obtain $K^s_t = \sum_{a,z} a \cdot D_t(a,z)$.
+
+    \item \textbf{Evaluate residual.} $F(\mathbf{r}^{(n)}) = K^s - K^d$.
+
+    \item \textbf{Convergence check.} If $\|F(\mathbf{r}^{(n)})\|_\infty < \varepsilon$, stop.
+
+    \item \textbf{Broyden update.} Apply the rank 1 Jacobian update and compute the next guess:
+    \begin{align*}
+        \mathbf{r}^{(n+1)} = \mathbf{r}^{(n)} - \left[B^{(n)}\right]^{-1} F(\mathbf{r}^{(n)})
+    \end{align*}
+    with $B^{(n+1)}$ updated via the same formula as in Algorithm~\ref{algo:broyden}. Return to Step 1.
+\end{enumerate}
+\end{algorithm_env}
+
+\subsection{Relationship to the Capital Path Formulation}
+
+The two formulations are equivalent in the following sense. The firm FOC \eqref{eq:r_from_K} defines a bijection between $r_t$ and $K_t$ (for fixed $Z_t$, $\alpha$, $\delta$). At any point where $K_t = K^d(r_t)$, the residual vectors coincide:
+\begin{align}
+    K^s(\mathbf{r}) - K^d(\mathbf{r}) = \hat{\mathbf{K}}(\mathbf{K}) - \mathbf{K} \label{eq:equivalence}
+\end{align}
+because $K^s$ is computed from the same backward forward pass in both cases (using the same prices), and $K^d(r_t) = K_t$ by construction.
+
+The formulations differ in their \emph{search space}: one explores $\R^T$ in capital coordinates, the other in interest rate coordinates. This affects the Jacobian approximation maintained by Broyden's method and therefore the convergence path, even though the fixed point is identical. In practice:
+\begin{itemize}[nosep]
+    \item The $\mathbf{r}$ formulation is more natural economically: it directly generalizes the steady state bisection on $r$.
+    \item The $\mathbf{K}$ formulation is closer to the shooting iteration: the residual $\hat{K} - K$ is the same quantity that the damped update drives to zero.
+    \item Convergence speed may differ due to different conditioning of the Jacobian in the two coordinate systems.
+\end{itemize}
+
+% ==================================================================
+\section{Transition Dynamics as a Coordination Problem}
+\label{sec:coordination}
+% ==================================================================
+
+The three methods above all solve the same equilibrium condition: aggregate capital supply equals aggregate capital demand at every date. But \emph{why} does a solution exist, and why is it unique? These questions are not merely theoretical. The convergence properties of shooting and Broyden, the role of damping, and the conditioning differences between the $\mathbf{K}$ and $\mathbf{r}$ formulations all trace back to the structure of the equilibrium fixed point. This section develops the connection between the Aiyagari transition path and the framework of strategic interaction in macroeconomic models, following Angeletos and Lian (2016). The key insight is that the standard Aiyagari model exhibits stabilizing general equilibrium feedback, which guarantees a unique equilibrium and underlies the convergence of all three numerical methods.
+
+\subsection{The Aiyagari Economy as a Game}
+\label{ssec:aiyagari_game}
+
+Even though households are atomistic (no single agent's savings decision moves prices), their collective behavior creates a feedback loop: individual savings determine aggregate capital, which determines prices, which in turn shape individual savings incentives. This feedback has the structure of a game among a continuum of players. Making this structure explicit connects the computational problem to the theory of coordination in macroeconomics.
+
+\begin{definition}[Bewley--Aiyagari game]
+\label{def:aiyagari_game}
+The Aiyagari economy defines the following game:
+\begin{itemize}[nosep]
+    \item \textbf{Players:} a continuum of households $i \in [0,1]$.
+    \item \textbf{Individual state (``fundamental''):} $\theta_i = (a_i, z_i) \in \mathcal{A} \times \mathcal{Z}$, the asset and productivity pair.
+    \item \textbf{Action:} $k'_i \in [\underline{a}, \bar{a}]$, the savings choice (next period capital holding).
+    \item \textbf{Aggregate outcome:} $K = \int k'_i \, dF(\theta_i)$, the mean savings across the population.
+    \item \textbf{Payoff:} The lifetime utility $V_t(a_i, z_i;\, \{r_s, w_s\}_{s \geq t})$ from the Bellman equation \eqref{eq:bellman_t}, where prices depend on aggregate capital through the firm first order conditions \eqref{eq:r_from_K}--\eqref{eq:w_from_K}.
+\end{itemize}
+\end{definition}
+
+\noindent Under the MIT shock assumption, every household has perfect foresight over the entire future path of the economy. In the terminology of Angeletos and Lian (2016), information is \emph{perfect}: no agent faces fundamental uncertainty (each knows $\theta_i$ and the cross-sectional distribution $\boldsymbol{\Theta}$) or strategic uncertainty (each can compute the equilibrium $K$ from common knowledge of the state). Higher order beliefs coincide with first order beliefs, and coordination is perfect.
+
+\begin{remark}[Atomistic agents and the ``game'' interpretation]
+\label{rem:atomistic}
+The game-theoretic language does not imply that agents reason strategically. Each household treats prices as exogenous and optimizes individually; the ``strategic'' interaction operates entirely through general equilibrium. The rational expectations equilibrium imposes that all agents perceive the same price path, and that this commonly perceived path coincides with the one generated by the joint behavior of all agents. This is the standard consistency requirement of a competitive equilibrium, recast in the language of a symmetric Bayesian Nash equilibrium following Angeletos and Lian (2016, Definition~2).
+\end{remark}
+
+\subsection{The Aggregate Fixed-Point Equation}
+\label{ssec:fixed_point}
+
+The equilibrium of the Aiyagari economy can be characterized as a fixed point: the capital path agents collectively choose, given the prices implied by that path, must reproduce the path itself. We now define this mapping precisely and connect it to the residual functions from the computational methods.
+
+\begin{definition}[Implied capital mapping]
+\label{def:G_mapping}
+Define $G: \R^T \to \R^T$ as follows. Given a candidate capital path $\mathbf{K} = (K_0, \ldots, K_{T-1})$:
+\begin{enumerate}[nosep]
+    \item Compute prices: $r_t = Z_t \alpha K_t^{\alpha-1} - \delta$, $w_t = Z_t(1-\alpha)K_t^\alpha$.
+    \item Run the backward iteration from $V_a^{\text{ss}}$ to obtain policies $\{a'_t\}_{t=0}^{T-1}$.
+    \item Run the forward iteration from $D_0 = D^{\text{ss}}$ to obtain implied capital $\hat{K}_t = \sum_{a,z} a \cdot D_t(a,z)$.
+\end{enumerate}
+Then $G(\mathbf{K})_t = \hat{K}_t$ is the implied capital at each date.
+\end{definition}
+
+\noindent The equilibrium condition is the fixed point
+\begin{align}
+    \mathbf{K} = G(\mathbf{K}), \label{eq:fixed_point}
+\end{align}
+which states that the capital path guessed by agents equals the capital path produced by their collectively optimal behavior at the corresponding prices. This is the $T$-dimensional analogue of the scalar fixed point equation $K = G(K, \mathbf{B})$ in Angeletos and Lian (2016, Proposition~3), where $\mathbf{B}$ is the cross-sectional distribution of beliefs about fundamentals. Under perfect information, $\mathbf{B}$ is degenerate at the true distribution, and the fixed point reduces to \eqref{eq:fixed_point}.
+
+The residual functions from the three computational methods are all derived from $G$:
+\begin{align}
+    F(\mathbf{K}) &= G(\mathbf{K}) - \mathbf{K} & &\text{(Method 2, root finding over $\mathbf{K}$)} \label{eq:F_from_G_K}\\
+    F(\mathbf{r}) &= K^s(\mathbf{r}) - K^d(\mathbf{r}) & &\text{(Method 3, root finding over $\mathbf{r}$)} \label{eq:F_from_G_r}
+\end{align}
+The shooting iteration (Method 1) is the damped fixed point iteration $\mathbf{K}^{(n+1)} = \lambda \mathbf{K}^{(n)} + (1-\lambda)\, G(\mathbf{K}^{(n)})$. All three methods search for the same object: a zero of $G(\mathbf{K}) - \mathbf{K}$.
+
+\subsection{Strategic Interaction and Equilibrium Uniqueness}
+\label{ssec:strategic_interaction}
+
+Whether the fixed point \eqref{eq:fixed_point} is unique, and whether iterative methods converge to it, depends on the \emph{slope} of $G$: how strongly the implied capital responds to a perturbation in the guessed capital. This slope encodes the nature of strategic interaction in the economy.
+
+\paragraph{Steady state analysis.} Consider first the scalar (steady state) case, where the fixed point is $K = G(K)$ with $G(K) = K^s(r(K), w(K))$. The derivative $G_K$ measures the general equilibrium feedback: if every household saves one unit more, how much does the implied aggregate capital change?
+
+Differentiating through the price functions:
+\begin{align}
+    G_K \;=\; \underbrace{\frac{\partial K^s}{\partial r} \cdot \frac{dr}{dK}}_{\text{interest rate channel}} \;+\; \underbrace{\frac{\partial K^s}{\partial w} \cdot \frac{dw}{dK}}_{\text{wage channel}} \label{eq:G_K_decomposition}
+\end{align}
+The two channels capture two distinct mechanisms through which aggregate capital feeds back into individual savings:
+\begin{enumerate}[nosep]
+    \item \textbf{Interest rate channel} (stabilizing). More aggregate capital lowers the marginal product of capital: $dr/dK = \alpha(\alpha - 1) Z K^{\alpha - 2} < 0$. A lower interest rate reduces the return on savings. For standard calibrations, the net effect on aggregate savings is negative ($\partial K^s / \partial r > 0$ combined with $dr/dK < 0$), so this channel makes each household want to save \emph{less} when others save more. In the language of Angeletos and Lian (2016), this is \emph{strategic substitutability}: the general equilibrium adjustment attenuates the partial equilibrium response.
+
+    \item \textbf{Wage channel} (destabilizing). More aggregate capital raises the marginal product of labor: $dw/dK = \alpha(1-\alpha)Z K^{\alpha-1} > 0$. Higher wages increase labor income, which raises aggregate savings ($\partial K^s / \partial w > 0$). This channel makes each household want to save \emph{more} when others save more: \emph{strategic complementarity}. The GE adjustment amplifies the PE response.
+\end{enumerate}
+
+\noindent The sign and magnitude of $G_K$ depend on which channel dominates. In the standard Aiyagari calibration (Cobb-Douglas production, no externalities, no aggregate demand spillovers), the interest rate channel is the dominant force. However, the strength of this channel is significantly affected by the precautionary savings motive, as we now discuss.
+
+\begin{remark}[Precautionary savings and the interest rate channel]
+\label{rem:precautionary}
+The interest rate channel operates through $\partial K^s / \partial r$, the response of aggregate savings to changes in the return on assets. In a representative agent economy, the Euler equation pins down $r = 1/\beta - 1$ in steady state, and any deviation from this rate induces a large savings response: $\partial K^s / \partial r$ is effectively infinite, making the interest rate channel maximally strong.
+
+In the Bewley-Aiyagari economy, idiosyncratic risk and borrowing constraints introduce three forces that dampen $\partial K^s / \partial r$:
+\begin{enumerate}[nosep]
+    \item \emph{Constrained agents do not respond.} A positive measure of households sits at the borrowing constraint, $a'_i = \underline{a}$, regardless of $r$. For these agents $\partial k'_i / \partial r = 0$, contributing zero to the aggregate elasticity.
+
+    \item \emph{The buffer stock target is inelastic.} Agents near the constraint maintain a precautionary buffer whose size is governed primarily by the variance of income shocks and the tightness of the borrowing limit, not by the return on savings. This buffer responds weakly to $r$.
+
+    \item \emph{Precautionary income effect.} A higher $r$ means the existing precautionary buffer earns a higher return, so agents can maintain the same level of self-insurance with \emph{less} saving. This is an income effect that opposes the substitution effect. Under CRRA utility with $\gamma > 1$, the income effect is amplified by the precautionary motive: the marginal value of the buffer falls when the buffer grows faster, reducing the incentive to add to it.
+\end{enumerate}
+
+The net effect on $\partial K^s / \partial r$ depends on the calibration. For moderate risk aversion ($\gamma \leq 2$), the substitution effect typically dominates and $\partial K^s / \partial r > 0$, preserving the stabilizing nature of the interest rate channel, though with reduced magnitude. For high risk aversion ($\gamma \geq 3$) combined with high income volatility, the precautionary income effect can dominate, pushing $\partial K^s / \partial r$ toward zero or even making it negative (Aiyagari, 1994, Table~III).
+
+When $\partial K^s / \partial r < 0$, the interest rate channel \emph{flips sign}: $(\partial K^s / \partial r)(dr/dK) = (-)\times(-) > 0$. Instead of strategic substitutability, the interest rate channel now contributes to strategic \emph{complementarity}: more aggregate capital lowers $r$, which through the dominant income effect raises savings further. In this regime, both channels push $G_K$ in the positive direction, making complementarity more likely. The standard Aiyagari calibration (Section~\ref{sec:application}) has $\gamma = 1.5$, which lies in the substitution-dominated regime, so the interest rate channel is stabilizing. But the general lesson is that incomplete markets weaken the interest rate channel relative to the representative agent benchmark, thereby shifting the economy in the direction of strategic complementarity.
+\end{remark}
+
+\begin{definition}[Strategic interaction classification]
+\label{def:strategic_types}
+Following Angeletos and Lian (2016, Definitions~5--6):
+\begin{itemize}[nosep]
+    \item The economy exhibits \emph{strategic substitutability} if $G_K < 0$: the GE feedback reverses the direction of the PE effect.
+    \item The economy exhibits \emph{weak strategic complementarity} if $G_K \in (0,1)$: the GE feedback amplifies the PE effect, but by less than one for one.
+    \item The economy exhibits \emph{strong strategic complementarity} if $G_K > 1$ at some equilibrium: the GE feedback is self-reinforcing, and multiple equilibria can arise.
+\end{itemize}
+\end{definition}
+
+\begin{proposition}[Equilibrium uniqueness]
+\label{prop:uniqueness}
+Consider the Aiyagari model with Cobb-Douglas production, no externalities, and standard parameter restrictions ($\alpha \in (0,1)$, $\delta > 0$, $\beta < 1$, $r^* < 1/\beta - 1$). If $|G_K| < 1$ at every fixed point $K = G(K)$, then:
+\begin{enumerate}[label=(\roman*)]
+    \item The steady state equilibrium exists and is unique.
+    \item The undamped fixed point iteration $K^{(n+1)} = G(K^{(n)})$ converges to $K^*$ from any initial guess in a neighborhood of $K^*$.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+Existence follows from the intermediate value theorem: $G$ maps a compact interval $[\underline{a}, \bar{a}]$ continuously into itself (the asset grid is bounded and the distribution has finite mean). For uniqueness: under strategic substitutability ($G_K < 0$), $G(K) - K$ is strictly decreasing, so it crosses zero at most once. Under weak complementarity ($G_K \in (0,1)$), $G$ is a contraction; the Banach fixed point theorem gives both uniqueness and convergence of the iteration. In either case, exactly one fixed point exists. Part (ii) follows from the contraction mapping theorem when $G_K \in [0,1)$, and from monotone convergence of $G(K) - K$ when $G_K < 0$ and $|G_K| < 1$.
+\end{proof}
+
+\noindent Proposition~\ref{prop:uniqueness} connects the economic structure of the model to the existence of a well-posed computational problem. The condition $|G_K| < 1$, which rules out strong complementarity, is what makes the transition path problem solvable by iterative methods. The same condition, applied to the $T$-dimensional Jacobian $\nabla G$, governs convergence of the dynamic methods (Section~\ref{ssec:dynamic_generalization}).
+
+\begin{remark}[What would break uniqueness]
+\label{rem:break_uniqueness}
+The standard Aiyagari model lacks mechanisms that would push $G_K$ above 1. In the neoclassical growth model example of Angeletos and Lian (2016), adding Romer-style production spillovers $Y = Z K^\alpha L^{1-\alpha} \cdot K^\gamma$ with $\gamma$ sufficiently large creates strong complementarity: more aggregate capital directly raises each firm's productivity, generating a positive feedback that can sustain multiple equilibria. In the heterogeneous agent literature, mechanisms that could generate strong complementarity include financial accelerators (where net worth affects borrowing capacity, creating a positive feedback between aggregate capital and individual investment), aggregate demand externalities, and search frictions with thick market effects. None of these are present in the standard Bewley-Aiyagari framework, which is why the equilibrium is unique and the computational methods converge.
+\end{remark}
+
+\begin{remark}[Connection to the excess demand formulation]
+\label{rem:excess_demand}
+The steady state equilibrium condition can equivalently be written as the excess demand for capital:
+\begin{align}
+    K^s(r) - K^d(r) = 0, \label{eq:excess_demand_ss}
+\end{align}
+which is the scalar version of the $\mathbf{r}$-formulation \eqref{eq:residual_r}. The condition $|G_K| < 1$ translates into a slope condition on the excess demand: at the equilibrium interest rate $r^*$, the excess demand function $K^s(r) - K^d(r)$ crosses zero with a well-defined sign. In the Aiyagari model, $K^d(r)$ is strictly decreasing (from $+\infty$ as $r \to -\delta^+$ to $0$ as $r \to +\infty$) and $K^s(r)$ is bounded and increasing for $r < 1/\beta - 1$, so the excess demand crosses zero exactly once: the same uniqueness result, seen from the $r$-side.
+\end{remark}
+
+\subsection{Computational Implications}
+\label{ssec:comp_implications}
+
+The derivative $G_K$ is not merely a theoretical quantity. It directly governs the convergence behavior of each computational method, providing a unified explanation for the numerical phenomena observed in practice.
+
+\paragraph{Damping in the shooting method.} The damped iteration \eqref{eq:damping} has the effective derivative
+\begin{align}
+    \frac{d}{dK}\left[\lambda K + (1-\lambda) G(K)\right] = \lambda + (1-\lambda) G_K. \label{eq:effective_slope}
+\end{align}
+Convergence requires $|\lambda + (1-\lambda) G_K| < 1$. Three cases arise:
+\begin{itemize}[nosep]
+    \item \emph{Weak complementarity} ($G_K \in (0,1)$): the undamped iteration ($\lambda = 0$) already converges. Damping slows convergence but is not needed for stability.
+    \item \emph{Substitutability with $|G_K| > 1$}: the undamped iteration oscillates and diverges. Damping stabilizes the oscillations by mixing old and new guesses, reducing the effective slope below 1 in magnitude.
+    \item \emph{Strong complementarity} ($G_K > 1$): no value of $\lambda \in [0,1)$ makes the effective slope less than 1 in magnitude. The fixed point is unstable under any damped iteration. This is the computational signature of multiple equilibria.
+\end{itemize}
+
+\noindent The fact that shooting converges with $\lambda = 2/3$ (Midrigan's step size $s = 1/3$) in the Aiyagari model confirms that the spectral radius of the GE feedback is bounded, consistent with unique equilibrium.
+
+\paragraph{Broyden convergence and the Jacobian.} Broyden's method approximates the Jacobian of $F(\mathbf{K}) = G(\mathbf{K}) - \mathbf{K}$. In the scalar case, this Jacobian is $G_K - 1$:
+\begin{itemize}[nosep]
+    \item When $G_K$ is far from 1 (substitutability or weak complementarity), $|G_K - 1|$ is well separated from zero. The Jacobian is well conditioned, and Broyden converges rapidly.
+    \item When $G_K \approx 1$ (near the boundary of strong complementarity), $G_K - 1 \approx 0$. The Jacobian is nearly singular: Newton-type methods slow down or fail. This is the computational signature of near-indeterminacy.
+\end{itemize}
+
+\noindent The rapid convergence of Broyden in the standard Aiyagari model ($\sim$15 iterations) confirms that $G_K$ is well below 1, placing the economy firmly in the determinate regime.
+
+\paragraph{Conditioning in $\mathbf{K}$ vs.\ $\mathbf{r}$ coordinates.} The two root finding formulations solve the same equilibrium but parameterize the search differently. Their Jacobians are related by the chain rule. In the scalar case:
+\begin{align}
+    F'_K(K) &= G_K - 1 & &\text{(Jacobian in $K$ coordinates)} \label{eq:jac_K} \\
+    F'_r(r) &= \frac{dK^s}{dr} - \frac{dK^d}{dr} & &\text{(Jacobian in $r$ coordinates)} \label{eq:jac_r}
+\end{align}
+Since the firm FOC defines a bijection $K^d(r(K)) = K$, differentiating gives $dK^d/dr \cdot dr/dK = 1$, so the Jacobians satisfy
+\begin{align}
+    F'_K(K) = F'_r(r) \cdot \frac{dr}{dK}. \label{eq:jacobian_change_of_vars}
+\end{align}
+The factor $dr/dK = \alpha(\alpha-1) Z K^{\alpha-2}$ is small in magnitude for typical calibrations (of order $10^{-4}$, since $K$ is large and $\alpha - 1 < 0$). This means $|dK/dr|$ is large: small changes in $r$ correspond to large changes in $K$. Equivalently, the $r$-formulation compresses a wide range of capital variation into a narrow range of interest rates.
+
+For Broyden's method, this compression is problematic when the initial Jacobian approximation is $B^{(0)} = I$. The identity is a reasonable approximation in $K$ coordinates (the residual and the variable are both in capital units), but a poor one in $r$ coordinates (the residual is in capital units while the variable is in interest rate units, with a scale mismatch of order $|dK/dr| \approx 3{,}654$). This explains why the $r$-formulation requires rescaling for efficient convergence.
+
+The rescaled variable $x_t = (r_t - \bar{r}) \cdot s$ with
+\begin{align}
+    s = \frac{K^*}{(\bar{r} + \delta)(1-\alpha)} \;\approx\; \left|\frac{dK}{dr}\right|_{r = \bar{r}} \label{eq:rescaling}
+\end{align}
+transforms the Jacobian to $F'_x = F'_r / s \approx F'_K$, restoring the natural conditioning of the $\mathbf{K}$-formulation and enabling convergence from a unit initialization.
+
+\subsection{The Dynamic Generalization}
+\label{ssec:dynamic_generalization}
+
+For the transition path, the scalar analysis extends to $T$ dimensions. The implied capital mapping $G: \R^T \to \R^T$ (Definition~\ref{def:G_mapping}) has a Jacobian $\nabla_\mathbf{K} G \in \R^{T \times T}$ with entries
+\begin{align}
+    [\nabla G]_{t,s} = \frac{\partial \hat{K}_t}{\partial K_s}, \label{eq:jacobian_dynamic}
+\end{align}
+which encode how a perturbation to capital at date $s$ (through the prices it generates) propagates to the implied capital supply at date $t$. This matrix has a rich structure:
+\begin{itemize}[nosep]
+    \item \emph{Diagonal entries} $[\nabla G]_{t,t}$: the within-period GE feedback, analogous to the scalar $G_K$. A change in $K_t$ alters prices at date $t$, which directly affects savings decisions at $t$.
+    \item \emph{Off-diagonal entries} $[\nabla G]_{t,s}$ for $s \neq t$: the intertemporal GE feedback. A price change at date $s$ propagates backward through the Euler equation (affecting policies at dates $t < s$) and forward through the distribution dynamics (affecting capital supply at dates $t > s$).
+\end{itemize}
+
+The equilibrium is unique and the damped shooting iteration converges whenever the spectral radius satisfies
+\begin{align}
+    \rho\!\left(\nabla G\right) < 1, \label{eq:spectral_condition}
+\end{align}
+which is the $T$-dimensional generalization of $|G_K| < 1$. With damping $\lambda$, the effective iteration matrix is $(1-\lambda)\nabla G + \lambda I$, and convergence requires $\rho((1-\lambda)\nabla G + \lambda I) < 1$. This is satisfied for sufficiently large $\lambda$ whenever $\rho(\nabla G)$ is finite, which holds in the Aiyagari model since the GE feedback is bounded.
+
+The off-diagonal entries of $\nabla G$ decay with $|t - s|$: a perturbation at a distant date has an attenuated effect on current capital supply, because the backward Euler equation and forward distribution dynamics are both contractive. This gives the Jacobian a nearly banded structure that Broyden's rank 1 updates approximate well, explaining the rapid convergence ($\sim$15 iterations for $T = 300$) observed in practice.
+
+\begin{remark}[Summary: economic structure and numerical performance]
+\label{rem:summary}
+The connections developed in this section are summarized in the following table.
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Economic property} & \textbf{Formal condition} & \textbf{Computational consequence} \\
+\midrule
+Diminishing returns & $dr/dK < 0$ & Stabilizing GE feedback \\
+Substitutability / weak compl. & $|G_K| < 1$ & Unique equilibrium \\
+Bounded spectral radius & $\rho(\nabla G) < 1$ & Shooting converges (with damping) \\
+Well-conditioned Jacobian & $G_K$ far from 1 & Broyden converges in $\sim$15 iters \\
+$K \leftrightarrow r$ bijection & $|dK/dr| \gg 1$ & Rescaling needed for $r$-formulation \\
+Decaying off-diagonals & $|[\nabla G]_{t,s}| \to 0$ as $|t-s| \to \infty$ & Rank 1 updates are effective \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{remark}
+
+% ==================================================================
 \section{Application: TFP Shock in the Aiyagari Model}
 \label{sec:application}
 % ==================================================================
@@ -363,5 +661,48 @@ The solver in \texttt{hetmacro.transition} is model agnostic. The user provides:
     \item Capital at time $t$ is computed as $K_t = \sum_{a,z} a \cdot D_t(a,z)$ (mean assets in the distribution), not as aggregate savings from policies. This avoids a timing mismatch between the guess and the implied path.
     \item The income argument to the steady state solver must be $y = w \cdot z$ (income levels), not raw productivity $z$. This ensures consistency between the steady state and the transition price function.
 \end{itemize}
+
+% ==================================================================
+% Bibliography
+% ==================================================================
+
+\begin{thebibliography}{9}
+
+\bibitem{Aiyagari1994}
+S.~R. Aiyagari.
+\newblock Uninsured idiosyncratic risk and aggregate saving.
+\newblock \emph{Quarterly Journal of Economics}, 109(3):659--684, 1994.
+
+\bibitem{AngeletosLian2016}
+G.-M. Angeletos and C.~Lian.
+\newblock Incomplete information in macroeconomics: Accommodating frictions in coordination.
+\newblock In J.~B. Taylor and H.~Uhlig, editors, \emph{Handbook of Macroeconomics}, volume~2A, chapter~9, pages 1065--1240. Elsevier, 2016.
+
+\bibitem{Broyden1965}
+C.~G. Broyden.
+\newblock A class of methods for solving nonlinear simultaneous equations.
+\newblock \emph{Mathematics of Computation}, 19(92):577--593, 1965.
+
+\bibitem{Carroll2006}
+C.~D. Carroll.
+\newblock The method of endogenous gridpoints for solving dynamic stochastic optimization problems.
+\newblock \emph{Economics Letters}, 91(3):312--320, 2006.
+
+\bibitem{CooperJohn1988}
+R.~Cooper and A.~John.
+\newblock Coordinating coordination failures in {K}eynesian models.
+\newblock \emph{Quarterly Journal of Economics}, 103(3):441--463, 1988.
+
+\bibitem{Diamond1982}
+P.~A. Diamond.
+\newblock Aggregate demand management in search equilibrium.
+\newblock \emph{Journal of Political Economy}, 90(5):881--894, 1982.
+
+\bibitem{Romer1986}
+P.~M. Romer.
+\newblock Increasing returns and long-run growth.
+\newblock \emph{Journal of Political Economy}, 94(5):1002--1037, 1986.
+
+\end{thebibliography}
 
 \end{document}
