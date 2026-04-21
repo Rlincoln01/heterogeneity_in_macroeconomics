@@ -78,6 +78,18 @@ Context: Needed mathematical reference for shooting and Broyden algorithms, in t
 Decision: Created standalone `docs/transition_path_methods.tex` covering setup, shooting algorithm (with EGM details including interpolation formula), Broyden root-finding, and application to Aiyagari TFP shock. Uses Macro Bible style conventions (algorithm environments, Palatino font, motivating paragraphs).
 Rationale: Serves as both a learning resource and documentation of the hetmacro transition solver internals.
 
+### 2026-03-25 — Krusell-Smith algorithm: VFI with Epstein-Zin aggregator
+
+Context: Pset 6 requires solving the KS model with aggregate shocks. Plan considered both EGM and VFI for the 4D Bellman.
+Decision: Implemented VFI with golden section search over savings fraction x in [0, 1), matching Matlab reference. Epstein-Zin CES aggregator: V = ((1-beta)*c^(1-theta) + beta*Vbar^(1-theta))^(1/(1-theta)). Howard improvement every 50 iterations.
+Rationale: VFI matches Matlab code exactly for verification; golden search over savings fraction is simpler and more robust than 4D EGM for the aggregate state dimensions.
+
+### 2026-03-25 — KS state ordering: Fortran order (k, K, e, Z)
+
+Context: Matlab uses gridmake(kgrid, Kgrid, egrid, zgrid) with k varying fastest.
+Decision: Match Matlab convention throughout: k fastest, Z slowest. Kronm call: kronm([nk, nK, Qez.T], v) for expected continuation value.
+Rationale: Enables direct comparison with Matlab reference outputs.
+
 ### 2026-03-11 — Housekeeping: commit backlog, README + codebook sync
 
 Context: Uncommitted work (BSpline speedup, pset5 updates, DECISIONS.md) was sitting on `dev/hetmacro-sync`. README was missing pset5. Codebook Quick Reference had stale API names and an incomplete dependency graph.

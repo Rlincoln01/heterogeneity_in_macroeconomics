@@ -6,6 +6,7 @@ from .euler_iteration import HowardEulerIteration, NaiveEulerIteration
 from .grid_vfi import GridVFI
 from .howard import HowardImprovement
 from .howard_grid import HowardGrid
+from .howard_labor import solve_household_labor
 from .policy_iteration import PolicyFunctionIteration
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "PolicyFunctionIteration",
     "NaiveEulerIteration",
     "HowardEulerIteration",
+    "solve_household_labor",
 ]

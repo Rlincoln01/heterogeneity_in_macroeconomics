@@ -46,6 +46,20 @@ class SolvedPolicy:
     z_grid: np.ndarray
     value: Optional[np.ndarray] = None
 
+
+@dataclass
+class SolvedPolicyLabor(SolvedPolicy):
+    """Solver output for models with endogenous labor supply.
+
+    Extends SolvedPolicy with hours, income, and tax policy functions.
+    """
+
+    policy_h: Optional[np.ndarray] = None       # hours worked h(a, e)
+    policy_y: Optional[np.ndarray] = None        # pre-tax income y(a, e)
+    policy_yhat: Optional[np.ndarray] = None     # post-tax income yhat(a, e)
+    policy_mtax: Optional[np.ndarray] = None     # marginal tax rate T'(y(a, e))
+    marginal_value: Optional[np.ndarray] = None  # V'(a) = g(a, e)
+
     def evaluate(self, a_points: np.ndarray, z_points: np.ndarray) -> Dict[str, np.ndarray]:
         """Evaluate policy functions on arbitrary points."""
         pts = np.column_stack([np.asarray(z_points).reshape(-1), np.asarray(a_points).reshape(-1)])

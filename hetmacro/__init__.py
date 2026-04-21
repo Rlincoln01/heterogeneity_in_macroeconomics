@@ -15,7 +15,10 @@ __all__ = [
     "household",
     "solvers",
     "ssj",
+    "taxes",
     "transition",
+    "kronm",
+    "chebyshev",
 ]
 
 __version__ = "0.1.0"

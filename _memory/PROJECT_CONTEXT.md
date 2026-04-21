@@ -16,13 +16,19 @@ Dual-branch pattern throughout: discrete income (Markov Pi) vs. continuous incom
 
 ## Current state
 
-- **Core package:** ~6,000 lines across 16 modules + 7 solvers + 1 model (Aiyagari).
-- **New module:** `transition.py` (~550 lines) — MIT shock transition path solver (shooting + root-finding). Features: `_IterationPlotter` class for Jupyter-aware live iteration plotting (`plot_iterations=True`). Fully tested; demo notebook at `examples/pset5/notebooks/pset5_transition_path.ipynb`.
-- **Examples:** 4 problem sets (pset1: quadrature/optimization, pset2: collocation/lifecycle, pset3: income fluctuation/Howard, pset5: Aiyagari GE multi-solver + transition path), plus benchmark and household test notebooks.
-- **Tests:** 2 files (156 lines) covering basis functions and Euler iteration solvers. Coverage is thin.
-- **Docs:** Codebook (76 pages, PDF from LaTeX), `docs/transition_path_methods.tex` (standalone LaTeX on shooting + Broyden algorithms), CompEcon comparison notes, `macro_agents.md` (500-line AI agent guide).
-- **Git:** `dev/hetmacro-sync` branch, ahead of `main`. Working tree has uncommitted transition solver + docs.
-- **README:** Up to date with current structure, all psets, solvers, and examples documented.
+- **Core package:** ~6,000 lines across 16 modules + 7 solvers + 3 models (Aiyagari, cm_rbc, krusell_smith).
+- **New modules (Pset 6):**
+  - `kronm.py` — fast Kronecker multiplication for 4D VFI.
+  - `chebyshev.py` — 2D tensor-product Chebyshev projection for law of motion.
+  - `models/solab.py` — QZ-based linear rational expectations solver.
+  - `models/cm_rbc.py` — complete markets RBC (linear + nonlinear projection).
+  - `models/krusell_smith.py` — SSJ GE IRFs + full KS algorithm (4D VFI, forward simulation, outer loop).
+- **Phase status (Pset 6):** Phases 1-4 complete. Phase 5 (notebook) not started.
+- **transition.py** (~550 lines) — MIT shock transition path solver.
+- **Examples:** 4 problem sets (pset1-3, pset5). Pset6 notebook pending.
+- **Tests:** 2 files (156 lines). Phase 1 infrastructure unit tested.
+- **Git:** `dev/hetmacro-sync` branch, ahead of `main`.
+- **README:** Needs update to reflect Pset 6 modules.
 
 ## Key modules (by size)
 
