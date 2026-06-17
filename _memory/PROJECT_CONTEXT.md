@@ -1,6 +1,6 @@
 # hetmacro — Project Context
 
-> Last updated: 2026-03-11
+> Last updated: 2026-04-21
 
 ## Purpose
 
@@ -24,10 +24,11 @@ Dual-branch pattern throughout: discrete income (Markov Pi) vs. continuous incom
   - `models/cm_rbc.py` — complete markets RBC (linear + nonlinear projection).
   - `models/krusell_smith.py` — SSJ GE IRFs + full KS algorithm (4D VFI, forward simulation, outer loop).
 - **Phase status (Pset 6):** Phases 1-4 complete. Phase 5 (notebook) not started.
+- **Pset 10 (Midrigan-Xu):** `models/midrigan_xu.py` complete (firm_static, entrepreneur_vfi with Howard, aggregate_mx, solve_mx_closed, solve_mx_open, simulate_firms). Notebook `examples/pset10/notebooks/pset10_midrigan_xu.ipynb` + six milestone driver scripts validated against slides 19-22 at full grid (na=501, nz=11).
 - **transition.py** (~550 lines) — MIT shock transition path solver.
-- **Examples:** 4 problem sets (pset1-3, pset5). Pset6 notebook pending.
+- **Examples:** 6 problem sets (pset1-3, pset5-8, pset10) + Bayesian HANK.
 - **Tests:** 2 files (156 lines). Phase 1 infrastructure unit tested.
-- **Git:** `dev/hetmacro-sync` branch, ahead of `main`.
+- **Git:** currently on `main`. Pre-pset10 WIP snapshot committed as `e2a8305` before pset10 module landed.
 - **README:** Needs update to reflect Pset 6 modules.
 
 ## Key modules (by size)
